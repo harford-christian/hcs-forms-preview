@@ -151,6 +151,15 @@
     function el(tag, attrs, html){ var e=document.createElement(tag);
       if(attrs) Object.keys(attrs).forEach(function(k){ e.setAttribute(k, attrs[k]); });
       if(html!=null) e.innerHTML=html; return e; }
+    function trap_(ov){
+      ov.addEventListener('keydown', function(e){
+        if(e.key!=='Tab') return;
+        var f=ov.querySelectorAll('button,input,select,textarea,a[href]'); if(!f.length) return;
+        var first=f[0], last=f[f.length-1];
+        if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+        else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+      });
+    }
     function modal(title, bodyHtml, btnLabel){
       return new Promise(function(resolve){
         var ov=document.createElement('div'); ov.className='modal-overlay';
@@ -158,7 +167,7 @@
         var b=ov.querySelector('button');
         b.onclick=function(){ ov.remove(); resolve(); };
         ov.addEventListener('keydown', function(e){ if(e.key==='Escape'){ ov.remove(); resolve(); } });
-        document.body.appendChild(ov); b.focus();
+        document.body.appendChild(ov); trap_(ov); b.focus();
       });
     }
     function confirm(title, bodyHtml, okLabel){
@@ -170,10 +179,26 @@
         ov.querySelector('[data-x="0"]').onclick=function(){ done(false); };
         ov.querySelector('[data-x="1"]').onclick=function(){ done(true); };
         ov.addEventListener('keydown', function(e){ if(e.key==='Escape') done(false); });
-        document.body.appendChild(ov); ov.querySelector('[data-x="1"]').focus();
+        document.body.appendChild(ov); trap_(ov); ov.querySelector('[data-x="1"]').focus();
       });
     }
-    return { esc:esc, toast:toast, el:el, modal:modal, confirm:confirm };
+    function prompt(title, opts){
+      opts = opts || {};
+      return new Promise(function(resolve){
+        var ov=document.createElement('div'); ov.className='modal-overlay';
+        var input = opts.multiline ? '<textarea class="control" id="_pmt"></textarea>'
+          : '<input class="control" id="_pmt" value="'+esc(opts.value||'')+'" placeholder="'+esc(opts.placeholder||'')+'">';
+        ov.innerHTML='<div class="modal" role="dialog" aria-modal="true" aria-label="'+esc(title)+'"><h3>'+esc(title)+'</h3><div class="mbody">'+(opts.body||'')+input+'</div>'+
+          '<div style="display:flex;gap:10px"><button class="btn ghost block" data-x="0" type="button">Cancel</button><button class="btn block" data-x="1" type="button">'+esc(opts.okLabel||'OK')+'</button></div></div>';
+        var field=ov.querySelector('#_pmt'); if(opts.multiline && opts.value) field.value=opts.value;
+        function done(v){ ov.remove(); resolve(v); }
+        ov.querySelector('[data-x="0"]').onclick=function(){ done(null); };
+        ov.querySelector('[data-x="1"]').onclick=function(){ done(field.value); };
+        field.addEventListener('keydown', function(e){ if(e.key==='Enter' && !opts.multiline){ e.preventDefault(); done(field.value); } if(e.key==='Escape') done(null); });
+        document.body.appendChild(ov); trap_(ov); field.focus();
+      });
+    }
+    return { esc:esc, toast:toast, el:el, modal:modal, confirm:confirm, prompt:prompt };
   })();
 </script>
 
@@ -412,10 +437,19 @@
         '<div class="field"><label for="otpCode">6-digit code</label><input class="control" id="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"></div>' +
         '<div id="otpErr" class="notice err" role="alert" style="display:none"></div>' +
         '<button id="otpVerify" class="btn block" type="button">Verify</button>' +
-        '<button id="otpBack" class="btn ghost block" type="button">Use a different email</button>' +
+        '<div style="display:flex;gap:10px;margin-top:8px"><button id="otpResend" class="btn ghost block" type="button">Resend code</button>' +
+        '<button id="otpBack" class="btn ghost block" type="button">Use a different email</button></div>' +
       '</div>');
     document.getElementById('otpVerify').addEventListener('click', verifyCode);
     document.getElementById('otpBack').addEventListener('click', renderOtp);
+    var resend = document.getElementById('otpResend');
+    resend.addEventListener('click', function () {
+      resend.disabled = true; var n = 20;
+      resend.textContent = 'Resend in ' + n + 's';
+      google.script.run.authRequestOtp(otpEmail);
+      FormsUI.toast('New code sent (if the email is on file)');
+      var t = setInterval(function () { n--; resend.textContent = n > 0 ? 'Resend in ' + n + 's' : 'Resend code'; if (n <= 0) { clearInterval(t); resend.disabled = false; } }, 1000);
+    });
     var codeEl = document.getElementById('otpCode');
     codeEl.focus();
     codeEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') verifyCode(); });
@@ -512,7 +546,7 @@
     var nav = document.getElementById('pageNav'); if (!nav) return;
     if (LOCKED) { nav.innerHTML = ''; document.querySelectorAll('.formpage').forEach(function (p) { p.style.display = ''; }); return; }
     var multi = PAGES.length > 1;
-    var prog = multi ? '<div class="progress"><div class="progress-bar" style="width:' + Math.round((CUR + 1) / PAGES.length * 100) + '%"></div></div>' +
+    var prog = multi ? '<div class="progress" role="progressbar" aria-valuemin="1" aria-valuemax="' + PAGES.length + '" aria-valuenow="' + (CUR + 1) + '" aria-label="Step ' + (CUR + 1) + ' of ' + PAGES.length + '"><div class="progress-bar" style="width:' + Math.round((CUR + 1) / PAGES.length * 100) + '%"></div></div>' +
       '<p class="help center">Step ' + (CUR + 1) + ' of ' + PAGES.length + (PAGES[CUR].title ? ' — ' + FormsUI.esc(PAGES[CUR].title) : '') + '</p>' : '';
     var btns = '<div style="display:flex;gap:10px;margin-top:14px">';
     if (multi && CUR > 0) btns += '<button class="btn ghost" id="prevBtn" type="button">← Back</button>';
@@ -547,14 +581,19 @@
       if (!evalShowIf(f.showIf, ans)) { setErr(f, ''); return; }
       var msg = '';
       if (f.type === 'file') { if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length)) msg = 'Please attach a file.'; }
-      else if (f.type === 'signature') { captureSignature(f); if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length)) msg = 'Please sign in the box.'; }
+      else if (f.type === 'signature') { captureSignature(f); if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length) && !readValue(f)) msg = 'Please sign in the box, or type your full name.'; }
       else { var v = readValue(f); if (f.required && fieldEmpty(f, v)) msg = 'This field is required.'; else if (!fieldEmpty(f, v) && f.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) msg = 'Enter a valid email address.'; }
       setErr(f, msg); if (msg) { ok = false; if (!firstBad) firstBad = f; }
     });
     return { ok: ok, firstBad: firstBad };
   }
   function pageOfField(fid) { for (var i = 0; i < PAGES.length; i++) if (PAGES[i].fields.some(function (f) { return f.id === fid; })) return i; return CUR; }
-  function navigateToField(f) { if (!f) return; var pi = pageOfField(f.id); if (pi !== CUR) showPage(pi); var w = document.querySelector('[data-fid="' + f.id + '"]'); if (w) w.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  function navigateToField(f) {
+    if (!f) return; var pi = pageOfField(f.id); if (pi !== CUR) showPage(pi);
+    var w = document.querySelector('[data-fid="' + f.id + '"]'); if (!w) return;
+    w.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    var c = w.querySelector('input:not([type=hidden]),select,textarea,canvas'); if (c) { try { c.focus({ preventScroll: true }); } catch (e) { try { c.focus(); } catch (x) {} } }
+  }
   function onFieldChange() { applyVisibility(); recomputeCalc(); saveDraft(); }
 
   // ---------- calculation fields ----------
@@ -678,7 +717,7 @@
     var lblEl = wrap.querySelector('label.fieldlabel');
     var primary = wrap.querySelector('#f_' + f.id);            // null for choice-group fields
     var grp = wrap.querySelector('.choices');
-    if (grp) { grp.setAttribute('role', 'group'); grp.setAttribute('aria-labelledby', 'lbl-' + f.id); }
+    if (grp) { grp.setAttribute('role', 'group'); grp.setAttribute('aria-labelledby', 'lbl-' + f.id); grp.setAttribute('aria-describedby', 'err-' + f.id); if (f.required) grp.setAttribute('aria-required', 'true'); }
     if (primary && lblEl) lblEl.setAttribute('for', 'f_' + f.id);
     if (primary) { if (f.required) primary.setAttribute('aria-required', 'true'); primary.setAttribute('aria-describedby', 'err-' + f.id); }
     var canv = wrap.querySelector('canvas'); if (canv) { canv.setAttribute('role', 'img'); canv.setAttribute('aria-label', (f.label || 'Signature') + ' — draw with mouse or finger'); }
@@ -704,6 +743,11 @@
       reader.readAsDataURL(file);
       list.innerHTML += '<div class="fitem">📎 ' + FormsUI.esc(file.name) + ' (' + Math.round(file.size / 1024) + ' KB)</div>';
     });
+    if (arr.length) {
+      list.innerHTML += '<button type="button" class="btn ghost sm" id="clr_' + f.id + '" style="margin-top:4px">Remove file' + (arr.length > 1 ? 's' : '') + '</button>';
+      var clr = document.getElementById('clr_' + f.id);
+      if (clr) clr.onclick = function () { ATTACH[f.id] = []; input.value = ''; list.innerHTML = ''; };
+    }
   }
 
   // ---------- signature pad ----------
@@ -878,8 +922,8 @@
         if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length)) msg = 'Please attach a file.';
       } else if (f.type === 'signature') {
         captureSignature(f);
-        answers[f.id] = readValue(f); // printed name (optional)
-        if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length)) msg = 'Please sign in the box.';
+        answers[f.id] = readValue(f); // printed name
+        if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length) && !readValue(f)) msg = 'Please sign in the box, or type your full name.';
       } else {
         var v = readValue(f); answers[f.id] = v;
         if (f.required && fieldEmpty(f, v)) msg = 'This field is required.';
@@ -912,11 +956,16 @@
       return;
     }
     clearDraft();
+    var nextStep = res.status === 'Pending Approval'
+      ? '<div class="notice info" style="text-align:left">Your submission will be reviewed. You’ll get an email with the decision.</div>' : '';
     shell('<div class="card flush-top card-pad center stack">' +
       '<div style="font-size:2.5rem">✓</div>' +
       '<h1 class="form-title">Submitted</h1>' +
       '<p class="form-desc">' + FormsUI.esc(res.message) + '</p>' +
-      '<p class="help">Reference: ' + FormsUI.esc(res.submissionId) + '</p></div>');
+      nextStep +
+      '<p class="help">Reference: ' + FormsUI.esc(res.submissionId) + '</p>' +
+      (IS_PREVIEW ? '' : '<button class="btn ghost" type="button" onclick="location.reload()">Submit another response</button>') +
+      '</div>');
   }
 })();
 </script>

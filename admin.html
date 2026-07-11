@@ -159,7 +159,12 @@
   .palette button { font-size:.8rem; padding:6px 10px; border:1px solid var(--line-strong); border-radius:999px; background:var(--card); cursor:pointer; }
   .palette button:hover { border-color:var(--hcs-red); color:var(--hcs-red); }
   .fieldcard { border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px; margin-bottom:10px; background:var(--panel); }
+  .fieldcard { cursor:default; }
   .fieldcard .fchead { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .draghandle { cursor:grab; color:var(--muted); font-size:1.05rem; user-select:none; }
+  .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+  .toolbar input, .toolbar select { padding:8px 10px; border:1px solid var(--line-strong); border-radius:var(--radius-sm); font:inherit; }
+  .toolbar input { flex:1; min-width:180px; }
   .fieldcard .ftype { font-size:.66rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:800; background:#eef1f5; padding:2px 7px; border-radius:6px; }
   .fieldcard .fcacts { margin-left:auto; display:flex; gap:4px; }
   .iconbtn { border:1px solid var(--line-strong); background:var(--card); border-radius:7px; width:30px; height:30px; cursor:pointer; font-size:.9rem; line-height:1; }
@@ -198,6 +203,15 @@
     function el(tag, attrs, html){ var e=document.createElement(tag);
       if(attrs) Object.keys(attrs).forEach(function(k){ e.setAttribute(k, attrs[k]); });
       if(html!=null) e.innerHTML=html; return e; }
+    function trap_(ov){
+      ov.addEventListener('keydown', function(e){
+        if(e.key!=='Tab') return;
+        var f=ov.querySelectorAll('button,input,select,textarea,a[href]'); if(!f.length) return;
+        var first=f[0], last=f[f.length-1];
+        if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+        else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+      });
+    }
     function modal(title, bodyHtml, btnLabel){
       return new Promise(function(resolve){
         var ov=document.createElement('div'); ov.className='modal-overlay';
@@ -205,7 +219,7 @@
         var b=ov.querySelector('button');
         b.onclick=function(){ ov.remove(); resolve(); };
         ov.addEventListener('keydown', function(e){ if(e.key==='Escape'){ ov.remove(); resolve(); } });
-        document.body.appendChild(ov); b.focus();
+        document.body.appendChild(ov); trap_(ov); b.focus();
       });
     }
     function confirm(title, bodyHtml, okLabel){
@@ -217,10 +231,26 @@
         ov.querySelector('[data-x="0"]').onclick=function(){ done(false); };
         ov.querySelector('[data-x="1"]').onclick=function(){ done(true); };
         ov.addEventListener('keydown', function(e){ if(e.key==='Escape') done(false); });
-        document.body.appendChild(ov); ov.querySelector('[data-x="1"]').focus();
+        document.body.appendChild(ov); trap_(ov); ov.querySelector('[data-x="1"]').focus();
       });
     }
-    return { esc:esc, toast:toast, el:el, modal:modal, confirm:confirm };
+    function prompt(title, opts){
+      opts = opts || {};
+      return new Promise(function(resolve){
+        var ov=document.createElement('div'); ov.className='modal-overlay';
+        var input = opts.multiline ? '<textarea class="control" id="_pmt"></textarea>'
+          : '<input class="control" id="_pmt" value="'+esc(opts.value||'')+'" placeholder="'+esc(opts.placeholder||'')+'">';
+        ov.innerHTML='<div class="modal" role="dialog" aria-modal="true" aria-label="'+esc(title)+'"><h3>'+esc(title)+'</h3><div class="mbody">'+(opts.body||'')+input+'</div>'+
+          '<div style="display:flex;gap:10px"><button class="btn ghost block" data-x="0" type="button">Cancel</button><button class="btn block" data-x="1" type="button">'+esc(opts.okLabel||'OK')+'</button></div></div>';
+        var field=ov.querySelector('#_pmt'); if(opts.multiline && opts.value) field.value=opts.value;
+        function done(v){ ov.remove(); resolve(v); }
+        ov.querySelector('[data-x="0"]').onclick=function(){ done(null); };
+        ov.querySelector('[data-x="1"]').onclick=function(){ done(field.value); };
+        field.addEventListener('keydown', function(e){ if(e.key==='Enter' && !opts.multiline){ e.preventDefault(); done(field.value); } if(e.key==='Escape') done(null); });
+        document.body.appendChild(ov); trap_(ov); field.focus();
+      });
+    }
+    return { esc:esc, toast:toast, el:el, modal:modal, confirm:confirm, prompt:prompt };
   })();
 </script>
 
@@ -315,6 +345,8 @@
     ['pageBreak', 'Page break'], ['calculation', 'Calculation']
   ];
   var OPTION_TYPES = { dropdown: 1, radio: 1, checkboxes: 1 };
+  var DIRTY = false, SAVING = false, AUTOSAVE_T = null, DRAG_FROM = null;
+  window.addEventListener('beforeunload', function (e) { if (DIRTY) { e.preventDefault(); e.returnValue = ''; } });
   var esc = FormsUI.esc;
 
   function call(fn, args) {
@@ -392,19 +424,42 @@
     });
   }
   function decide(decision, formId, subId) {
-    var comment = prompt(decision + ' — add a note for the requester (optional):', '');
-    if (comment === null) return;
-    call('decideApproval', [formId, subId, decision, comment]).then(function (res) {
-      FormsUI.toast(res.ok ? ('Marked ' + res.status) : (res.message || 'Error'));
-      loadList();
-    }).catch(alertErr);
+    FormsUI.prompt(decision, { body: '<p class="help">Add a note for the requester (optional).</p>', placeholder: 'Note (optional)', okLabel: decision, multiline: true }).then(function (comment) {
+      if (comment === null) return;
+      call('decideApproval', [formId, subId, decision, comment]).then(function (res) {
+        FormsUI.toast(res.ok ? ('Marked ' + res.status) : (res.message || 'Error'));
+        loadList();
+      }).catch(alertErr);
+    });
   }
 
   function renderForms(items) {
     var host = document.getElementById('list');
     if (!items.length) { host.innerHTML = '<p class="help">No forms yet. Click “New form” to start.</p>'; return; }
-    host.innerHTML = '<div class="grid">' + items.map(function (m) {
-      return '<div class="fcard"><h3>' + esc(m.title || '(untitled)') + '</h3>' +
+    host.innerHTML =
+      '<div class="toolbar"><input id="fSearch" type="search" placeholder="Search forms…" aria-label="Search forms">' +
+        '<select id="fStatus" aria-label="Filter by status"><option value="">All statuses</option><option>draft</option><option>published</option><option>closed</option></select>' +
+        '<select id="fSort" aria-label="Sort"><option value="updated">Recently updated</option><option value="title">Title A–Z</option><option value="responses">Most responses</option></select></div>' +
+      '<div id="grid"></div>';
+    var draw = function () {
+      var q = (document.getElementById('fSearch').value || '').toLowerCase();
+      var st = document.getElementById('fStatus').value;
+      var sort = document.getElementById('fSort').value;
+      var list = items.filter(function (m) {
+        return (!q || String(m.title || '').toLowerCase().indexOf(q) > -1 || String(m.owner || '').toLowerCase().indexOf(q) > -1) && (!st || m.lifecycle === st);
+      });
+      if (sort === 'title') list.sort(function (a, b) { return String(a.title).localeCompare(String(b.title)); });
+      else if (sort === 'responses') list.sort(function (a, b) { return (b.submissions || 0) - (a.submissions || 0); });
+      document.getElementById('grid').innerHTML = list.length ? '<div class="grid">' + list.map(formCardHtml).join('') + '</div>' : '<p class="help">No forms match.</p>';
+      wireCardButtons();
+    };
+    document.getElementById('fSearch').oninput = draw;
+    document.getElementById('fStatus').onchange = draw;
+    document.getElementById('fSort').onchange = draw;
+    draw();
+  }
+  function formCardHtml(m) {
+    return '<div class="fcard"><h3>' + esc(m.title || '(untitled)') + '</h3>' +
         '<div class="pills">' + statePills(m) + '</div>' +
         '<div class="meta">' + m.submissions + ' response' + (m.submissions === 1 ? '' : 's') +
           (TAB === 'all' ? ' · ' + esc(m.owner) : '') + '</div>' +
@@ -413,8 +468,6 @@
           btn('Share', 'share', m.id, 'ghost') + btn('Duplicate', 'dup', m.id, 'ghost') +
           btn('Save as template', 'tpl', m.id, 'ghost') + btn('Delete', 'del', m.id, 'ghost') +
         '</div></div>';
-    }).join('') + '</div>';
-    wireCardButtons();
   }
 
   function renderLibrary(items) {
@@ -458,10 +511,25 @@
     });
   }
 
+  // generic bespoke modal that reads its inputs on OK (before closing)
+  function modalWith(title, bodyHtml, okLabel, onOk) {
+    var ov = document.createElement('div'); ov.className = 'modal-overlay';
+    ov.innerHTML = '<div class="modal" role="dialog" aria-modal="true"><h3>' + esc(title) + '</h3><div class="mbody">' + bodyHtml + '</div>' +
+      '<div style="display:flex;gap:10px"><button class="btn ghost block" data-x="0" type="button">Close</button>' +
+      (okLabel ? '<button class="btn block" data-x="1" type="button">' + esc(okLabel) + '</button>' : '') + '</div></div>';
+    function close() { ov.remove(); }
+    ov.querySelector('[data-x="0"]').onclick = close;
+    var ok = ov.querySelector('[data-x="1"]'); if (ok) ok.onclick = function () { if (onOk) onOk(ov); close(); };
+    ov.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    document.body.appendChild(ov); (ok || ov.querySelector('[data-x="0"]')).focus();
+    return ov;
+  }
+
   function newBlank() {
-    var title = prompt('Name your new form:', 'Untitled form');
-    if (title === null) return;
-    call('createForm', [title]).then(function (r) { openEditor(r.formId); }).catch(alertErr);
+    FormsUI.prompt('New form', { placeholder: 'Form name', value: 'Untitled form', okLabel: 'Create' }).then(function (title) {
+      if (title === null) return;
+      call('createForm', [title || 'Untitled form']).then(function (r) { openEditor(r.formId); }).catch(alertErr);
+    });
   }
   function doUse(id) { call('createFromTemplate', [id]).then(function (r) { FormsUI.toast('Copied to your forms'); openEditor(r.formId); }).catch(alertErr); }
   function doDuplicate(id) {
@@ -487,15 +555,34 @@
   }
   function doShare(id) {
     call('getShareUrl', [id]).then(function (r) {
-      if (!r.url) return alert('Deploy the public URL first (Config tab). Access: ' + r.access);
-      window.prompt('Share this link (' + accessLabel(r.access) + '):', r.url);
+      if (!r.url) return alert('Set the public/builder URL in the Config tab first (this form’s access: ' + accessLabel(r.access) + ').');
+      var qr = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(r.url);
+      var body = '<p class="help" style="margin-bottom:8px">Access: ' + esc(accessLabel(r.access)) + '</p>' +
+        '<input class="control" id="_shareurl" readonly value="' + esc(r.url) + '" style="margin-bottom:8px">' +
+        '<button class="btn block sm" id="_copybtn" type="button">Copy link</button>' +
+        '<div class="center" style="margin-top:12px"><img alt="QR code for this form" src="' + esc(qr) + '" style="width:180px;height:180px;border:1px solid var(--line);border-radius:8px"></div>';
+      var ov = modalWith('Share form', body, null);
+      ov.querySelector('#_copybtn').onclick = function () {
+        var i = ov.querySelector('#_shareurl'); i.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        try { navigator.clipboard.writeText(i.value); } catch (e) {}
+        FormsUI.toast('Link copied');
+      };
     }).catch(alertErr);
   }
   function doSaveAsTemplate(id) {
-    var scope = ME.isAdmin ? (confirm('Publish to the SHARED library for all staff?\n\nOK = shared · Cancel = personal') ? 'shared' : 'personal') : 'personal';
-    var useAsIs = confirm('Lock the layout so it must be used as-is?\n\nOK = use as-is (no edits) · Cancel = starter (copy & edit)');
-    call('saveAsTemplate', [id, { scope: scope, layoutLock: useAsIs ? 'useAsIs' : 'starter' }])
-      .then(function () { FormsUI.toast('Saved to ' + scope + ' library'); }).catch(alertErr);
+    var scopeSel = ME.isAdmin
+      ? '<label class="lbl">Library</label><select class="control" id="_tscope"><option value="shared">Shared — all staff can use it</option><option value="personal">Personal — only me</option></select>'
+      : '<input type="hidden" id="_tscope" value="personal"><p class="help">Saved to your personal library.</p>';
+    var body = scopeSel + '<label class="lbl">When someone uses it</label><select class="control" id="_tlock">' +
+      '<option value="starter">Starter — they copy &amp; edit freely</option>' +
+      '<option value="useAsIs">Use as-is — layout locked</option></select>';
+    modalWith('Save as template', body, 'Save', function (ov) {
+      var scope = (ov.querySelector('#_tscope') || {}).value || 'personal';
+      var lock = (ov.querySelector('#_tlock') || {}).value || 'starter';
+      call('saveAsTemplate', [id, { scope: scope, layoutLock: lock }])
+        .then(function () { FormsUI.toast('Saved to ' + scope + ' library'); }).catch(alertErr);
+    });
   }
 
   // ---------- editor ----------
@@ -520,21 +607,31 @@
       return '<button data-type="' + t[0] + '">+ ' + esc(t[1]) + '</button>'; }).join('') + '</div>';
     var lockBanner = locked ? '<div class="banner">This form’s layout is locked (use as-is). You can change its settings, but not its fields.</div>' : '';
 
+    DIRTY = false; clearTimeout(AUTOSAVE_T);
     chrome(
       '<div style="display:flex;align-items:center;gap:10px;margin:16px 0">' + back +
-        '<h1 class="form-title" style="margin:0;font-size:1.2rem">Editing: ' + esc(EDITING.meta.title) + '</h1></div>' +
-      '<div class="editor"><div>' + lockBanner +
-        '<div class="field"><label>Form title</label><input class="control" id="fTitle" value="' + esc(EDITING.schema.title || '') + '"' + (locked ? ' readonly' : '') + '></div>' +
-        '<div class="field" style="margin-top:10px"><label>Description</label><textarea class="control" id="fDesc"' + (locked ? ' readonly' : '') + '>' + esc(EDITING.schema.description || '') + '</textarea></div>' +
+        '<h1 class="form-title" style="margin:0;font-size:1.2rem">Editing: ' + esc(EDITING.meta.title) + '</h1>' +
+        '<span id="saveState" class="help" style="margin-left:auto">✓ Saved</span></div>' +
+      '<div class="editor" id="editorRoot"><div>' + lockBanner +
+        '<div class="field"><label for="fTitle">Form title</label><input class="control" id="fTitle" value="' + esc(EDITING.schema.title || '') + '"' + (locked ? ' readonly' : '') + '></div>' +
+        '<div class="field" style="margin-top:10px"><label for="fDesc">Description</label><textarea class="control" id="fDesc"' + (locked ? ' readonly' : '') + '>' + esc(EDITING.schema.description || '') + '</textarea></div>' +
         '<div class="divider"></div>' + palette +
         '<div id="canvas"></div>' +
       '</div>' + sidePanel() + '</div>');
 
-    document.getElementById('back').onclick = renderDashboard;
+    document.getElementById('back').onclick = function () {
+      // save pending edits before leaving so nothing is lost
+      var go = function () { DIRTY = false; renderDashboard(); };
+      if (DIRTY && !EDITING.structureLocked) doSave(true).then(go); else go();
+    };
     if (!locked) {
       document.querySelectorAll('.palette button').forEach(function (b) { b.onclick = function () { addField(b.getAttribute('data-type')); }; });
       document.getElementById('fTitle').oninput = function () { EDITING.schema.title = this.value; };
       document.getElementById('fDesc').oninput = function () { EDITING.schema.description = this.value; };
+      // one delegated listener → any field/setting edit marks dirty + schedules autosave
+      var root = document.getElementById('editorRoot');
+      root.addEventListener('input', markDirty);
+      root.addEventListener('change', markDirty);
     }
     wireSide();
     renderCanvas();
@@ -563,9 +660,36 @@
       var calcop = document.getElementById('calcop_' + f.id), calcsrc = document.getElementById('calcsrc_' + f.id);
       var updCalc = function () { if (!f.calc) f.calc = { op: 'sum', fields: [] }; if (calcop) f.calc.op = calcop.value; if (calcsrc) f.calc.fields = Array.prototype.slice.call(calcsrc.querySelectorAll('input:checked')).map(function (i) { return i.value; }); };
       if (calcop) calcop.onchange = updCalc; if (calcsrc) calcsrc.addEventListener('change', updCalc);
-      document.getElementById('up_' + f.id).onclick = function () { move(i, -1); };
-      document.getElementById('dn_' + f.id).onclick = function () { move(i, 1); };
-      document.getElementById('del_' + f.id).onclick = function () { fields().splice(i, 1); renderCanvas(); };
+      document.getElementById('up_' + f.id).onclick = function () { move(i, -1); markDirty(); };
+      document.getElementById('dn_' + f.id).onclick = function () { move(i, 1); markDirty(); };
+      document.getElementById('dup_' + f.id).onclick = function () { duplicateFieldAt(i); };
+      document.getElementById('del_' + f.id).onclick = function () { deleteFieldAt(i); };
+    });
+    // drag-and-drop reorder (dragging from within an input is ignored)
+    host.querySelectorAll('.fieldcard').forEach(function (card) {
+      card.addEventListener('dragstart', function (e) {
+        if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) { e.preventDefault(); return; }
+        DRAG_FROM = Number(card.getAttribute('data-idx')); try { e.dataTransfer.effectAllowed = 'move'; } catch (x) {} card.style.opacity = '.45';
+      });
+      card.addEventListener('dragend', function () { card.style.opacity = ''; });
+      card.addEventListener('dragover', function (e) { e.preventDefault(); card.style.borderColor = 'var(--hcs-red)'; });
+      card.addEventListener('dragleave', function () { card.style.borderColor = ''; });
+      card.addEventListener('drop', function (e) {
+        e.preventDefault(); card.style.borderColor = '';
+        var to = Number(card.getAttribute('data-idx'));
+        if (DRAG_FROM == null || DRAG_FROM === to) return;
+        var fs2 = fields(); var moved = fs2.splice(DRAG_FROM, 1)[0]; fs2.splice(to, 0, moved);
+        DRAG_FROM = null; renderCanvas(); markDirty();
+      });
+    });
+  }
+  function duplicateFieldAt(i) {
+    var fs = fields(); var c = JSON.parse(JSON.stringify(fs[i])); c.id = uid();
+    fs.splice(i + 1, 0, c); renderCanvas(); markDirty();
+  }
+  function deleteFieldAt(i) {
+    FormsUI.confirm('Delete this field?', 'This removes the field from the form.', 'Delete').then(function (ok) {
+      if (!ok) return; fields().splice(i, 1); renderCanvas(); markDirty();
     });
   }
 
@@ -628,10 +752,14 @@
           '<select class="control" id="cop_' + f.id + '">' + condOpOpts(f.showIf) + '</select>' +
           '<input class="control" id="cval_' + f.id + '" value="' + esc((f.showIf && f.showIf.value) || '') + '" placeholder="value"></div></details>';
     }
-    return '<div class="fieldcard"><div class="fchead"><span class="ftype">' + esc(typeLabel) + '</span>' +
-      '<div class="fcacts"><button class="iconbtn" id="up_' + f.id + '" title="Move up">↑</button>' +
-      '<button class="iconbtn" id="dn_' + f.id + '" title="Move down">↓</button>' +
-      '<button class="iconbtn" id="del_' + f.id + '" title="Delete">✕</button></div></div>' + body + '</div>';
+    return '<div class="fieldcard" draggable="true" data-idx="' + i + '" data-fid="' + f.id + '"><div class="fchead">' +
+      '<span class="draghandle" title="Drag to reorder" aria-hidden="true">⠿</span>' +
+      '<span class="ftype">' + esc(typeLabel) + '</span>' +
+      '<div class="fcacts">' +
+      '<button class="iconbtn" id="up_' + f.id + '" title="Move up" aria-label="Move up">↑</button>' +
+      '<button class="iconbtn" id="dn_' + f.id + '" title="Move down" aria-label="Move down">↓</button>' +
+      '<button class="iconbtn" id="dup_' + f.id + '" title="Duplicate field" aria-label="Duplicate field">⧉</button>' +
+      '<button class="iconbtn" id="del_' + f.id + '" title="Delete field" aria-label="Delete field">✕</button></div></div>' + body + '</div>';
   }
   function condFieldOpts(cur) {
     var sel = (cur.showIf && cur.showIf.field) || '';
@@ -680,7 +808,7 @@
     if (OPTION_TYPES[type]) f.options = ['Option 1'];
     if (type === 'sectionHeader') f.label = 'Section title';
     if (type === 'calculation') f.calc = { op: 'sum', fields: [] };
-    fields().push(f); renderCanvas();
+    fields().push(f); renderCanvas(); markDirty();
     setTimeout(function () { var el = document.getElementById('lbl_' + f.id); if (el) el.focus(); }, 30);
   }
 
@@ -754,27 +882,37 @@
     document.getElementById('btnSave').onclick = saveAll;
     document.getElementById('btnPreview').onclick = function () {
       // save current edits first so the preview reflects them, then open
-      var st = { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, openDate: s.openDate || '', closeDate: s.closeDate || '', maxResponses: Number(s.maxResponses) || 0, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage };
-      var p = EDITING.structureLocked ? Promise.resolve({ ok: true }) : call('saveForm', [EDITING.meta.id, EDITING.schema]);
-      p.then(function () { return call('setFormState', [EDITING.meta.id, st]); })
-        .then(function () { doPreview(EDITING.meta.id); }).catch(alertErr);
+      doSave(true).then(function () { doPreview(EDITING.meta.id); });
     };
     document.getElementById('btnShare').onclick = function () { doShare(EDITING.meta.id); };
     document.getElementById('btnResp').onclick = function () { openResponses(EDITING.meta.id); };
   }
 
-  function saveAll() {
-    var btn = document.getElementById('btnSave'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…';
+  function stateFromSettings_(s) {
+    return { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, openDate: s.openDate || '', closeDate: s.closeDate || '', maxResponses: Number(s.maxResponses) || 0, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage };
+  }
+  function markDirty() { DIRTY = true; setDirtyDot(true); scheduleAutosave(); }
+  function setDirtyDot(on) { var d = document.getElementById('saveState'); if (d) d.textContent = on ? '● Unsaved…' : '✓ Saved'; }
+  function scheduleAutosave() { if (EDITING && EDITING.structureLocked) return; clearTimeout(AUTOSAVE_T); AUTOSAVE_T = setTimeout(function () { doSave(true); }, 1500); }
+  /** Save schema + settings. silent=true for autosave (no toast, no button spinner). Returns a promise. */
+  function doSave(silent) {
+    if (!EDITING) return Promise.resolve();
+    if (SAVING) { scheduleAutosave(); return Promise.resolve(); }
+    SAVING = true;
     var s = EDITING.schema.settings;
+    var btn = document.getElementById('btnSave');
+    if (!silent && btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…'; }
     var save1 = EDITING.structureLocked ? Promise.resolve({ ok: true }) : call('saveForm', [EDITING.meta.id, EDITING.schema]);
-    save1.then(function () {
-      return call('setFormState', [EDITING.meta.id, { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, openDate: s.openDate || '', closeDate: s.closeDate || '', maxResponses: Number(s.maxResponses) || 0, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage }]);
-    }).then(function () { btn.disabled = false; btn.textContent = 'Save'; FormsUI.toast('Saved'); })
+    return save1
+      .then(function () { return call('setFormState', [EDITING.meta.id, stateFromSettings_(s)]); })
+      .then(function () { SAVING = false; DIRTY = false; setDirtyDot(false); if (btn) { btn.disabled = false; btn.textContent = 'Save'; } if (!silent) FormsUI.toast('Saved'); })
       .catch(function (e) {
-        btn.disabled = false; btn.textContent = 'Save';
-        alert(String(e && e.message || e) === 'LAYOUT_LOCKED' ? 'This form’s layout is locked and can’t be changed.' : String(e && e.message || e));
+        SAVING = false; if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+        var msg = String(e && e.message || e) === 'LAYOUT_LOCKED' ? 'This form’s layout is locked and can’t be changed.' : String(e && e.message || e);
+        if (!silent) alert(msg);
       });
   }
+  function saveAll() { return doSave(false); }
 
   // ---------- responses ----------
   function openResponses(formId) {
