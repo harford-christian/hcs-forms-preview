@@ -339,6 +339,11 @@
   var TOKEN_KEY = 'hcsFormsToken';
   var TOKEN = null; try { TOKEN = localStorage.getItem(TOKEN_KEY); } catch (e) {}
   var IS_PREVIEW = (typeof PREVIEW_MODE !== 'undefined' && PREVIEW_MODE === '1');
+  var EDIT_ID = (typeof EDIT_SUB !== 'undefined' && EDIT_SUB) ? EDIT_SUB : '';
+  var EDIT_T  = (typeof EDIT_TOKEN !== 'undefined' && EDIT_TOKEN) ? EDIT_TOKEN : '';
+  var IS_EDIT = !!EDIT_ID;
+  var EDIT_ANSWERS = null; // stored answers to pre-fill when editing
+  var ON_FILE = {};        // fieldId -> true when a file/signature is already on record
   var FIELDS = [];      // flat INPUT-field metadata (values + validation)
   var VISALL = [];      // ALL fields incl. section headers/descriptions (for show/hide)
   var PREFILL = null;   // { parent:{first,last,email}, students:[...] } for verified parents
@@ -358,7 +363,9 @@
     var runner = google.script.run
       .withSuccessHandler(onForm)
       .withFailureHandler(function (e) { message('Something went wrong', String(e && e.message || e)); });
-    if (IS_PREVIEW) runner.getFormPreview(FORM_ID); else runner.getPublicForm(FORM_ID, TOKEN);
+    if (IS_PREVIEW) runner.getFormPreview(FORM_ID);
+    else if (IS_EDIT) runner.getSubmissionForEdit(FORM_ID, EDIT_ID, EDIT_T);
+    else runner.getPublicForm(FORM_ID, TOKEN);
   }
 
   function onForm(res) {
@@ -369,6 +376,7 @@
     }
     PREFILL = res.prefill || null;
     VIA = res.verifiedVia || 'open';
+    if (IS_EDIT) { EDIT_ANSWERS = res.answers || {}; ON_FILE = res.onFile || {}; }
     renderForm(res.form);
   }
 
@@ -396,6 +404,9 @@
     if (r === 'full') return ['This form is full', 'It has reached its response limit and can no longer accept submissions.'];
     if (r === 'locked' || r === 'not-published') return ['Form unavailable', 'This form is not currently accepting responses.'];
     if (r === 'auth-required') return ['Sign-in required', 'This form is only available to staff.'];
+    if (r === 'bad-token') return ['Link expired', 'This edit link is no longer valid. Please use the most recent confirmation email.'];
+    if (r === 'edit-disabled') return ['Editing is off', 'This form’s responses can’t be edited after submitting.'];
+    if (r === 'not-editable') return ['Can’t edit this response', 'This response has already been ' + (String(res.status || '').toLowerCase() || 'processed') + ' and can no longer be changed.'];
     return ['Unavailable', 'This form can’t be shown right now.'];
   }
   function fmtWhen(s) {
@@ -483,6 +494,7 @@
     FIELDS = []; VISALL = [];
     var body = '<div class="card flush-top card-pad stack">';
     if (IS_PREVIEW) body += '<div class="notice info">👁 <strong>Preview</strong> — this is exactly what submitters see (with sample data). Nothing is saved.</div>';
+    if (IS_EDIT) body += '<div class="notice info">✏️ <strong>Editing your response</strong> — make your changes below and save. You can also withdraw it entirely.</div>';
     // honeypot (bots fill it; humans never see it) — server drops any submission with this set
     body += '<input type="text" id="hpField" name="hp_addr" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute!important;left:-9999px;top:auto;width:1px;height:1px;opacity:0">';
     if (VIA === 'otp' && PREFILL && PREFILL.parent) {
@@ -515,12 +527,17 @@
       host.appendChild(pdiv);
     });
 
-    applyPrefill();
+    if (!IS_EDIT) applyPrefill();
     initSignatures();
-    restoreDraft();
-    // URL-parameter prefill (staff-shared links): ?fieldId=value
-    if (typeof URL_PREFILL === 'object' && URL_PREFILL) {
-      FIELDS.forEach(function (f) { if (URL_PREFILL[f.id] != null && URL_PREFILL[f.id] !== '') writeValue(f, URL_PREFILL[f.id]); });
+    if (IS_EDIT) {
+      FIELDS.forEach(function (f) { if (EDIT_ANSWERS && EDIT_ANSWERS[f.id] != null) writeValue(f, EDIT_ANSWERS[f.id]); });
+      markOnFileFields();
+    } else {
+      restoreDraft();
+      // URL-parameter prefill (staff-shared links): ?fieldId=value
+      if (typeof URL_PREFILL === 'object' && URL_PREFILL) {
+        FIELDS.forEach(function (f) { if (URL_PREFILL[f.id] != null && URL_PREFILL[f.id] !== '') writeValue(f, URL_PREFILL[f.id]); });
+      }
     }
     recomputeCalc();
     applyVisibility();
@@ -554,14 +571,17 @@
       '<p class="help center">Step ' + (CUR + 1) + ' of ' + PAGES.length + (PAGES[CUR].title ? ' — ' + FormsUI.esc(PAGES[CUR].title) : '') + '</p>' : '';
     var btns = '<div style="display:flex;gap:10px;margin-top:14px">';
     if (multi && CUR > 0) btns += '<button class="btn ghost" id="prevBtn" type="button">← Back</button>';
-    btns += (CUR < PAGES.length - 1)
-      ? '<button class="btn block" id="nextBtn" type="button">Next →</button>'
-      : '<button class="btn block" id="submitBtn" type="button">Submit</button>';
+    var lastPage = CUR >= PAGES.length - 1;
+    btns += lastPage
+      ? '<button class="btn block" id="submitBtn" type="button">' + (IS_EDIT ? 'Save changes' : 'Submit') + '</button>'
+      : '<button class="btn block" id="nextBtn" type="button">Next →</button>';
     btns += '</div>';
+    if (IS_EDIT && lastPage) btns += '<div style="margin-top:10px"><button class="btn ghost block" id="withdrawBtn" type="button" style="color:var(--hcs-red)">Withdraw this response</button></div>';
     nav.innerHTML = prog + btns;
     var pv = document.getElementById('prevBtn'); if (pv) pv.onclick = function () { showPage(CUR - 1); };
     var nx = document.getElementById('nextBtn'); if (nx) nx.onclick = onNext;
     var sb = document.getElementById('submitBtn'); if (sb) sb.onclick = onSubmit;
+    var wb = document.getElementById('withdrawBtn'); if (wb) wb.onclick = onWithdraw;
   }
   function onNext() {
     if (uploadsPending('nextBtn')) return;
@@ -584,8 +604,8 @@
       if (f.type === 'sectionHeader' || f.type === 'description' || f.type === 'calculation') return;
       if (!evalShowIf(f.showIf, ans)) { setErr(f, ''); return; }
       var msg = '';
-      if (f.type === 'file') { if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length)) msg = 'Please attach a file.'; }
-      else if (f.type === 'signature') { captureSignature(f); if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length) && !readValue(f)) msg = 'Please sign in the box, or type your full name.'; }
+      if (f.type === 'file') { if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length) && !(IS_EDIT && ON_FILE[f.id])) msg = 'Please attach a file.'; }
+      else if (f.type === 'signature') { captureSignature(f); if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length) && !readValue(f) && !(IS_EDIT && ON_FILE[f.id])) msg = 'Please sign in the box, or type your full name.'; }
       else { var v = readValue(f); if (f.required && fieldEmpty(f, v)) msg = 'This field is required.'; else if (!fieldEmpty(f, v) && f.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) msg = 'Enter a valid email address.'; }
       setErr(f, msg); if (msg) { ok = false; if (!firstBad) firstBad = f; }
     });
@@ -617,7 +637,15 @@
   // ---------- save & resume (localStorage) ----------
   function draftKey() { return 'hcsFormsDraft:' + FORM_ID; }
   function saveDraft() {
+    if (IS_EDIT) return; // editing an existing response — don't touch the new-submission draft
     try { var d = {}; FIELDS.forEach(function (f) { if (f.type === 'file' || f.type === 'signature' || f.type === 'calculation') return; d[f.id] = readValue(f); }); localStorage.setItem(draftKey(), JSON.stringify(d)); } catch (e) {}
+  }
+  // In edit mode, note which file/signature fields already have a value so re-upload is optional.
+  function markOnFileFields() {
+    Object.keys(ON_FILE || {}).forEach(function (id) {
+      var wrap = document.querySelector('[data-fid="' + id + '"]');
+      if (wrap) wrap.appendChild(FormsUI.el('div', { 'class': 'help' }, '📎 A file is already on record — leave blank to keep it, or add a new one to replace it.'));
+    });
   }
   function clearDraft() { try { localStorage.removeItem(draftKey()); } catch (e) {} }
   function restoreDraft() {
@@ -931,11 +959,11 @@
       if (!vis[f.id]) return; // hidden by conditional logic — don't validate or submit
       var msg = '';
       if (f.type === 'file') {
-        if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length)) msg = 'Please attach a file.';
+        if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length) && !(IS_EDIT && ON_FILE[f.id])) msg = 'Please attach a file.';
       } else if (f.type === 'signature') {
         captureSignature(f);
         answers[f.id] = readValue(f); // printed name
-        if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length) && !readValue(f)) msg = 'Please sign in the box, or type your full name.';
+        if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length) && !readValue(f) && !(IS_EDIT && ON_FILE[f.id])) msg = 'Please sign in the box, or type your full name.';
       } else {
         var v = readValue(f); answers[f.id] = v;
         if (f.required && fieldEmpty(f, v)) msg = 'This field is required.';
@@ -952,31 +980,55 @@
     }
     formErr.style.display = 'none';
     if (IS_PREVIEW) { onSubmitDone({ ok: true, message: 'This is a preview — your response was NOT saved.', submissionId: 'PREVIEW' }); return; }
-    var btn = document.getElementById('submitBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
-    google.script.run
+    var btn = document.getElementById('submitBtn'); btn.disabled = true;
+    var label = IS_EDIT ? 'Save changes' : 'Submit';
+    btn.innerHTML = '<span class="spinner"></span> ' + (IS_EDIT ? 'Saving…' : 'Submitting…');
+    var run = google.script.run
       .withSuccessHandler(onSubmitDone)
-      .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = 'Submit'; formErr.style.display = 'block'; formErr.textContent = String(e && e.message || e); })
-      .submitForm(FORM_ID, answers, TOKEN, ATTACH, ((document.getElementById('hpField') || {}).value || ''));
+      .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = label; formErr.style.display = 'block'; formErr.textContent = String(e && e.message || e); });
+    if (IS_EDIT) run.updateSubmission(FORM_ID, EDIT_ID, EDIT_T, answers, ATTACH);
+    else run.submitForm(FORM_ID, answers, TOKEN, ATTACH, ((document.getElementById('hpField') || {}).value || ''));
+  }
+
+  function onWithdraw() {
+    FormsUI.confirm('Withdraw this response?', 'This cancels your submission. This can’t be undone, but you can submit the form again afterward.', 'Withdraw', 'Keep it')
+      .then(function (yes) {
+        if (!yes) return;
+        var wb = document.getElementById('withdrawBtn'); if (wb) { wb.disabled = true; wb.innerHTML = '<span class="spinner"></span> Withdrawing…'; }
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res && res.ok) {
+              shell('<div class="card flush-top card-pad center stack"><div style="font-size:2.5rem">✓</div>' +
+                '<h1 class="form-title">Response withdrawn</h1>' +
+                '<p class="form-desc">' + FormsUI.esc(res.message || 'Your response has been withdrawn.') + '</p></div>');
+            } else {
+              if (wb) { wb.disabled = false; wb.textContent = 'Withdraw this response'; }
+              var fe = document.getElementById('formErr'); if (fe) { fe.style.display = 'block'; fe.textContent = (res && res.message) || (res && reasonText(res)[1]) || 'Could not withdraw this response.'; }
+            }
+          })
+          .withFailureHandler(function (e) { if (wb) { wb.disabled = false; wb.textContent = 'Withdraw this response'; } var fe = document.getElementById('formErr'); if (fe) { fe.style.display = 'block'; fe.textContent = String(e && e.message || e); } })
+          .withdrawSubmission(FORM_ID, EDIT_ID, EDIT_T);
+      });
   }
 
   function onSubmitDone(res) {
     var btn = document.getElementById('submitBtn'), formErr = document.getElementById('formErr');
     if (!res || !res.ok) {
-      if (btn) { btn.disabled = false; btn.textContent = 'Submit'; }
+      if (btn) { btn.disabled = false; btn.textContent = IS_EDIT ? 'Save changes' : 'Submit'; }
       if (res && res.errors) { FIELDS.forEach(function (f) { if (res.errors[f.id]) setErr(f, res.errors[f.id]); }); formErr.style.display = 'block'; formErr.textContent = 'Please fix the highlighted fields.'; }
       else { formErr.style.display = 'block'; formErr.textContent = (res && res.message) || 'Submission failed. Please try again.'; }
       return;
     }
-    clearDraft();
+    if (!IS_EDIT) clearDraft();
     var nextStep = res.status === 'Pending Approval'
       ? '<div class="notice info" style="text-align:left">Your submission will be reviewed. You’ll get an email with the decision.</div>' : '';
     shell('<div class="card flush-top card-pad center stack">' +
       '<div style="font-size:2.5rem">✓</div>' +
-      '<h1 class="form-title">Submitted</h1>' +
+      '<h1 class="form-title">' + (IS_EDIT ? 'Changes saved' : 'Submitted') + '</h1>' +
       '<p class="form-desc">' + FormsUI.esc(res.message) + '</p>' +
       nextStep +
       '<p class="help">Reference: ' + FormsUI.esc(res.submissionId) + '</p>' +
-      (IS_PREVIEW ? '' : '<button class="btn ghost" type="button" onclick="location.reload()">Submit another response</button>') +
+      (IS_PREVIEW || IS_EDIT ? '' : '<button class="btn ghost" type="button" onclick="location.reload()">Submit another response</button>') +
       '</div>');
   }
 })();

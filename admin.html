@@ -873,6 +873,9 @@
       '<div class="switchrow"><span>Limit to one response per person</span><span class="toggle"><input type="checkbox" id="sOnce"' + (s.onePerEmail ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<label class="lbl">Notify on submit (emails, comma-sep)</label><input class="control" id="sNotify" value="' + esc((s.notifyEmails || []).join(', ')) + '">' +
       '<label class="lbl">Confirmation message</label><textarea class="control" id="sConfirm">' + esc(s.confirmationMessage || '') + '</textarea>' +
+      '<div class="divider"></div><h4>Response record</h4>' +
+      '<div class="switchrow"><span>Attach a PDF copy to the confirmation email</span><span class="toggle"><input type="checkbox" id="sPdf"' + (s.pdfCopy ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+      '<div class="switchrow"><span>Let people edit or withdraw their response (adds a link to the receipt)</span><span class="toggle"><input type="checkbox" id="sEdit"' + (s.allowEdit ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<div class="divider"></div><h4>Scheduling &amp; limits</h4>' +
       '<label class="lbl">Opens (optional)</label><input class="control" id="sOpen" type="datetime-local" value="' + esc(s.openDate || '') + '">' +
       '<label class="lbl">Closes (optional)</label><input class="control" id="sClose" type="datetime-local" value="' + esc(s.closeDate || '') + '">' +
@@ -899,6 +902,8 @@
     document.getElementById('sLock').onchange = function () { s.locked = this.checked; };
     document.getElementById('sReview').onchange = function () { s.reviewMode = this.checked; };
     document.getElementById('sOnce').onchange = function () { s.onePerEmail = this.checked; };
+    document.getElementById('sPdf').onchange = function () { s.pdfCopy = this.checked; };
+    document.getElementById('sEdit').onchange = function () { s.allowEdit = this.checked; };
     document.getElementById('sOpen').onchange = function () { s.openDate = this.value; };
     document.getElementById('sClose').onchange = function () { s.closeDate = this.value; };
     document.getElementById('sMax').oninput = function () { s.maxResponses = Number(this.value) || 0; };
@@ -919,7 +924,7 @@
   }
 
   function stateFromSettings_(s) {
-    return { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, openDate: s.openDate || '', closeDate: s.closeDate || '', maxResponses: Number(s.maxResponses) || 0, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage };
+    return { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, pdfCopy: !!s.pdfCopy, allowEdit: !!s.allowEdit, openDate: s.openDate || '', closeDate: s.closeDate || '', maxResponses: Number(s.maxResponses) || 0, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage };
   }
   function markDirty() { DIRTY = true; setDirtyDot(true); scheduleAutosave(); }
   function setDirtyDot(on) { var d = document.getElementById('saveState'); if (d) d.textContent = on ? '● Unsaved…' : '✓ Saved'; }
