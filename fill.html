@@ -428,6 +428,8 @@
     FIELDS = []; VISALL = [];
     var body = '<div class="card flush-top card-pad stack">';
     if (IS_PREVIEW) body += '<div class="notice info">👁 <strong>Preview</strong> — this is exactly what submitters see (with sample data). Nothing is saved.</div>';
+    // honeypot (bots fill it; humans never see it) — server drops any submission with this set
+    body += '<input type="text" id="hpField" name="hp_addr" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute!important;left:-9999px;top:auto;width:1px;height:1px;opacity:0">';
     if (VIA === 'otp' && PREFILL && PREFILL.parent) {
       body += '<div class="notice info" style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
         '<span>Signed in as <strong>' + FormsUI.esc(PREFILL.parent.email) + '</strong></span>' +
@@ -869,7 +871,7 @@
     google.script.run
       .withSuccessHandler(onSubmitDone)
       .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = 'Submit'; formErr.style.display = 'block'; formErr.textContent = String(e && e.message || e); })
-      .submitForm(FORM_ID, answers, TOKEN, ATTACH);
+      .submitForm(FORM_ID, answers, TOKEN, ATTACH, ((document.getElementById('hpField') || {}).value || ''));
   }
 
   function onSubmitDone(res) {
