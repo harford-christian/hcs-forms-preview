@@ -215,10 +215,11 @@
     add('f-interest', {title:'Sample Interest Form', access:'open', submissions:42}, { title:'Sample Interest Form', description:'Tell us about your interest in HCS.', settings:base('open'), pages:pg([
       {id:'fn',type:'text',label:'First name',required:true},{id:'ln',type:'text',label:'Last name',required:true},
       {id:'em',type:'email',label:'Email',required:true},{id:'g',type:'dropdown',label:'Grade of interest',options:['K4','K5','1','2','3','4','5','6','7','8','9','10','11','12']}]) });
-    add('f-trip', {title:'Field Trip Permission', access:'private', submissions:18}, { title:'Field Trip Permission', description:'Parent permission for the class trip.', settings:base('private'), pages:pg([
-      {id:'pf',type:'text',label:'First name',required:true,prefillFrom:'parentFirst'},{id:'pl',type:'text',label:'Last name',required:true,prefillFrom:'parentLast'},
-      {id:'pe',type:'email',label:'Your email',required:true,prefillFrom:'parentEmail'},{id:'stu',type:'studentPicker',label:'Which student(s)?',required:true,multiple:true},
-      {id:'perm',type:'yesno',label:'I give permission to attend.',required:true}]) });
+    add('f-trip', {title:'Field Trip Request', access:'staff', submissions:8, category:'Staff'}, { title:'Field Trip Request', description:'Staff trip request — approval routing + conditional overnight section.', settings:Object.assign(base('staff'),{approval:{enabled:true,approvers:['principal@harfordchristian.org'],mode:'any'}}), pages:pg([
+      {id:'trip',type:'text',label:'Trip name / purpose',required:true},{id:'dest',type:'text',label:'Destination',required:true},
+      {id:'overnight',type:'yesno',label:'Is this an overnight trip?',required:true},
+      {id:'lodging',type:'textarea',label:'Overnight lodging & chaperone plan',required:true,showIf:{field:'overnight',op:'equals',value:'Yes'}},
+      {id:'cost',type:'number',label:'Estimated cost per student ($)'}]) });
     add('f-conf', {title:'HS Parent/Teacher Conference', access:'private', submissions:63, category:'High School'}, { title:'HS Parent/Teacher Conference', description:'Request a conference.', settings:base('private'), pages:pg([
       {id:'pf',type:'text',label:'First name',required:true,prefillFrom:'parentFirst'},{id:'pe',type:'email',label:'Email',required:true,prefillFrom:'parentEmail'},
       {id:'stu',type:'studentPicker',label:'Student',required:true},{id:'teach',type:'staffPicker',label:'Teacher(s) to meet',required:true,multiple:true,staffLevel:'HS'},
@@ -251,7 +252,11 @@
       setFormState: function(id, st){ var m=STORE[id].meta; if(st.lifecycle)m.lifecycle=st.lifecycle; if(st.access)m.access=st.access; if(typeof st.locked==='boolean')m.locked=st.locked; return {ok:true,meta:JSON.parse(JSON.stringify(m))}; },
       saveAsTemplate: function(id, opts){ var n=nid('t-new-'); var sc=JSON.parse(JSON.stringify(STORE[id].schema)); sc.id=n; add(n,{title:sc.title,isTemplate:true,templateScope:opts.scope,layoutLock:opts.layoutLock,lifecycle:'template'},sc); return {ok:true,templateId:n,scope:opts.scope,layoutLock:opts.layoutLock}; },
       getShareUrl: function(id){ return {ok:true, url: location.href.replace(/admin\.html.*$/, 'fill.html?form=demo-open'), access: STORE[id].meta.access}; },
-      getResponses: function(id){ var m=STORE[id].meta; return {ok:true, headers:['SubmissionID','Timestamp','Email','First name','Last name','Status'], rows:rows(Math.min(6,m.submissions)), count:m.submissions, sheetUrl:''}; }
+      getResponses: function(id){ var m=STORE[id].meta; return {ok:true, headers:['SubmissionID','Timestamp','Email','First name','Last name','Status'], rows:rows(Math.min(6,m.submissions)), count:m.submissions, sheetUrl:''}; },
+      getApprovalQueue: function(){ return {ok:true, items:[
+        {formId:'f-trip', formTitle:'Field Trip Request', submissionId:'SUB-2001', respondentEmail:'teacher@harfordchristian.org', timestamp:'2/3/26 8:10 AM', summary:'Trip name: Zoo Trip · Destination: Baltimore · Is this an overnight trip?: No'},
+        {formId:'f-trip', formTitle:'Field Trip Request', submissionId:'SUB-2002', respondentEmail:'coach@harfordchristian.org', timestamp:'2/4/26 1:20 PM', summary:'Trip name: State Tournament · Is this an overnight trip?: Yes · Overnight lodging & chaperone plan: Hampton Inn; 4 chaperones'} ]}; },
+      decideApproval: function(formId, subId, decision){ return {ok:true, status:decision}; }
     };
     function runnerObj(){ var s=null,f=null; var o={ withSuccessHandler:function(fn){s=fn;return o;}, withFailureHandler:function(fn){f=fn;return o;} };
       Object.keys(API).forEach(function(mm){ o[mm]=function(){ var a=arguments; setTimeout(function(){ try{ s&&s(API[mm].apply(null,a)); }catch(e){ f&&f(e); } },120); }; }); return o; }
@@ -302,15 +307,19 @@
   boot();
   function boot() {
     chrome('<p class="help" style="padding:24px">Loading…</p>');
-    call('whoAmI').then(function (me) { ME = me; renderDashboard(); })
-      .catch(function (e) { chrome('<div class="card card-pad"><h1 class="form-title">Access denied</h1><p class="form-desc">' + esc(String(e && e.message || e)) + '</p></div>'); });
+    call('whoAmI').then(function (me) {
+      ME = me;
+      var v = new URLSearchParams(location.search).get('view');
+      if (v === 'approvals') TAB = 'approvals';
+      renderDashboard();
+    }).catch(function (e) { chrome('<div class="card card-pad"><h1 class="form-title">Access denied</h1><p class="form-desc">' + esc(String(e && e.message || e)) + '</p></div>'); });
   }
 
   // ---------- dashboard ----------
   function renderDashboard() {
     var tabs = '<div class="tabs">' +
       tabBtn('mine', 'My forms') + tabBtn('library', 'Template library') +
-      (ME.isAdmin ? tabBtn('all', 'All forms') : '') + '</div>';
+      (ME.isAdmin ? tabBtn('all', 'All forms') : '') + tabBtn('approvals', 'Approvals') + '</div>';
     var header = '<div style="display:flex;align-items:center;gap:10px;margin-top:18px">' +
       '<h1 class="form-title" style="margin:0">Forms</h1>' +
       '<div style="margin-left:auto;display:flex;gap:8px">' +
@@ -320,19 +329,44 @@
     chrome(header + tabs + '<div id="list"><p class="help">Loading…</p></div>');
     document.getElementById('newBlank').onclick = newBlank;
     document.getElementById('newTpl').onclick = function () { TAB = 'library'; renderDashboard(); };
-    ['mine', 'library', 'all'].forEach(function (t) { var b = document.getElementById('tab_' + t); if (b) b.onclick = function () { TAB = t; renderDashboard(); }; });
+    ['mine', 'library', 'all', 'approvals'].forEach(function (t) { var b = document.getElementById('tab_' + t); if (b) b.onclick = function () { TAB = t; renderDashboard(); }; });
     loadList();
   }
   function tabBtn(id, label) { return '<button class="tab ' + (TAB === id ? 'on' : '') + '" id="tab_' + id + '">' + esc(label) + '</button>'; }
 
   function loadList() {
     var host = function () { return document.getElementById('list'); };
-    if (TAB === 'library') {
+    if (TAB === 'approvals') {
+      call('getApprovalQueue').then(function (res) { renderApprovalQueue(res.items || []); }).catch(err);
+    } else if (TAB === 'library') {
       call('listLibrary').then(function (items) { renderLibrary(items); }).catch(err);
     } else {
       call(TAB === 'all' ? 'listAllForms' : 'listMyForms').then(function (items) { renderForms(items); }).catch(err);
     }
     function err(e) { host().innerHTML = '<div class="notice err">' + esc(String(e && e.message || e)) + '</div>'; }
+  }
+
+  function renderApprovalQueue(items) {
+    var host = document.getElementById('list');
+    if (!items.length) { host.innerHTML = '<p class="help">Nothing is awaiting your approval right now. 🎉</p>'; return; }
+    host.innerHTML = '<div class="grid">' + items.map(function (it) {
+      return '<div class="fcard"><h3>' + esc(it.formTitle) + '</h3>' +
+        '<div class="meta">from ' + esc(it.respondentEmail || '—') + ' · ' + esc(it.timestamp) + '</div>' +
+        '<div class="help">' + esc(it.summary || '') + '</div>' +
+        '<div class="acts"><button class="btn sm" data-ap="Approved" data-f="' + esc(it.formId) + '" data-s="' + esc(it.submissionId) + '">Approve</button>' +
+        '<button class="btn ghost sm" data-ap="Rejected" data-f="' + esc(it.formId) + '" data-s="' + esc(it.submissionId) + '">Reject</button></div></div>';
+    }).join('') + '</div>';
+    document.querySelectorAll('[data-ap]').forEach(function (b) {
+      b.onclick = function () { decide(b.getAttribute('data-ap'), b.getAttribute('data-f'), b.getAttribute('data-s')); };
+    });
+  }
+  function decide(decision, formId, subId) {
+    var comment = prompt(decision + ' — add a note for the requester (optional):', '');
+    if (comment === null) return;
+    call('decideApproval', [formId, subId, decision, comment]).then(function (res) {
+      FormsUI.toast(res.ok ? ('Marked ' + res.status) : (res.message || 'Error'));
+      loadList();
+    }).catch(alertErr);
   }
 
   function renderForms(items) {
@@ -469,6 +503,9 @@
       var multEl = document.getElementById('mult_' + f.id); if (multEl) multEl.onchange = function () { f.multiple = this.checked; };
       var lvlEl = document.getElementById('lvl_' + f.id); if (lvlEl) lvlEl.onchange = function () { f.staffLevel = this.value; };
       var accEl = document.getElementById('acc_' + f.id); if (accEl) accEl.oninput = function () { f.accept = this.value; };
+      var cif = document.getElementById('cif_' + f.id), cop = document.getElementById('cop_' + f.id), cval = document.getElementById('cval_' + f.id);
+      var updCond = function () { if (!cif || !cif.value) { delete f.showIf; } else { f.showIf = { field: cif.value, op: cop.value, value: cval.value }; } };
+      if (cif) cif.onchange = updCond; if (cop) cop.onchange = updCond; if (cval) cval.oninput = updCond;
       document.getElementById('up_' + f.id).onclick = function () { move(i, -1); };
       document.getElementById('dn_' + f.id).onclick = function () { move(i, 1); };
       document.getElementById('del_' + f.id).onclick = function () { fields().splice(i, 1); renderCanvas(); };
@@ -506,11 +543,31 @@
         body += '<details class="adv"><summary>Advanced</summary><label class="lbl">Auto-fill from FACTS</label>' +
           '<select class="control" id="pf_' + f.id + '">' + prefillOpts(f.prefillFrom) + '</select></details>';
       }
+      body += '<details class="adv"><summary>Conditional logic</summary>' +
+        '<label class="lbl">Show this field only if…</label>' +
+        '<div class="frow">' +
+          '<select class="control" id="cif_' + f.id + '">' + condFieldOpts(f) + '</select>' +
+          '<select class="control" id="cop_' + f.id + '">' + condOpOpts(f.showIf) + '</select>' +
+          '<input class="control" id="cval_' + f.id + '" value="' + esc((f.showIf && f.showIf.value) || '') + '" placeholder="value"></div></details>';
     }
     return '<div class="fieldcard"><div class="fchead"><span class="ftype">' + esc(typeLabel) + '</span>' +
       '<div class="fcacts"><button class="iconbtn" id="up_' + f.id + '" title="Move up">↑</button>' +
       '<button class="iconbtn" id="dn_' + f.id + '" title="Move down">↓</button>' +
       '<button class="iconbtn" id="del_' + f.id + '" title="Delete">✕</button></div></div>' + body + '</div>';
+  }
+  function condFieldOpts(cur) {
+    var sel = (cur.showIf && cur.showIf.field) || '';
+    var opts = '<option value="">— always show —</option>';
+    fields().forEach(function (f) {
+      if (f.id === cur.id || f.type === 'sectionHeader' || f.type === 'description') return;
+      opts += '<option value="' + f.id + '"' + (sel === f.id ? ' selected' : '') + '>' + esc(f.label || f.id) + '</option>';
+    });
+    return opts;
+  }
+  function condOpOpts(showIf) {
+    var sel = (showIf && showIf.op) || 'equals';
+    return [['equals', 'equals'], ['notEquals', 'does not equal'], ['contains', 'contains'], ['notEmpty', 'is not empty'], ['empty', 'is empty']]
+      .map(function (o) { return '<option value="' + o[0] + '"' + (sel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('');
   }
   function prefillOpts(sel) {
     return [['', '— none —'], ['parentFirst', 'Parent first name'], ['parentLast', 'Parent last name'],
@@ -548,6 +605,7 @@
   // ---------- side settings panel ----------
   function sidePanel() {
     var s = EDITING.schema.settings, m = EDITING.meta;
+    var ap = s.approval || {};
     return '<div class="side"><h4>Settings</h4>' +
       '<label class="lbl">Access</label><select class="control" id="sAccess">' +
         opt('open', 'Open (anyone with link)', s.access) + opt('private', 'Private (FACTS email)', s.access) + opt('staff', 'Staff only (SSO)', s.access) + '</select>' +
@@ -557,6 +615,10 @@
       '<div class="switchrow"><span>Review mode — send both emails to the submitter</span><span class="toggle"><input type="checkbox" id="sReview"' + (s.reviewMode ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<label class="lbl">Notify on submit (emails, comma-sep)</label><input class="control" id="sNotify" value="' + esc((s.notifyEmails || []).join(', ')) + '">' +
       '<label class="lbl">Confirmation message</label><textarea class="control" id="sConfirm">' + esc(s.confirmationMessage || '') + '</textarea>' +
+      '<div class="divider"></div><h4>Approvals</h4>' +
+      '<div class="switchrow"><span>Require approval before it’s final</span><span class="toggle"><input type="checkbox" id="aEn"' + (ap.enabled ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+      '<label class="lbl">Approvers (emails or group names, comma-sep)</label><input class="control" id="aWho" value="' + esc((ap.approvers || []).join(', ')) + '">' +
+      '<label class="lbl">Require</label><select class="control" id="aMode">' + opt('any', 'Any one approver', ap.mode || 'any') + opt('all', 'All approvers', ap.mode || 'any') + '</select>' +
       '<div class="divider"></div>' +
       (EDITING.structureLocked ? '' : '<button class="btn gold block" id="btnParent" style="margin-bottom:8px">➕ This form is for Parents</button>') +
       '<button class="btn block" id="btnSave">Save</button>' +
@@ -573,6 +635,10 @@
     document.getElementById('sLife').onchange = function () { s.lifecycle = this.value; };
     document.getElementById('sLock').onchange = function () { s.locked = this.checked; };
     document.getElementById('sReview').onchange = function () { s.reviewMode = this.checked; };
+    if (!s.approval) s.approval = { enabled: false, approvers: [], mode: 'any' };
+    document.getElementById('aEn').onchange = function () { s.approval.enabled = this.checked; };
+    document.getElementById('aWho').oninput = function () { s.approval.approvers = this.value.split(',').map(function (x) { return x.trim(); }).filter(Boolean); };
+    document.getElementById('aMode').onchange = function () { s.approval.mode = this.value; };
     document.getElementById('sNotify').oninput = function () { s.notifyEmails = this.value.split(',').map(function (x) { return x.trim(); }).filter(Boolean); };
     document.getElementById('sConfirm').oninput = function () { s.confirmationMessage = this.value; };
     var bp = document.getElementById('btnParent'); if (bp) bp.onclick = addParentBlock;
@@ -586,7 +652,7 @@
     var s = EDITING.schema.settings;
     var save1 = EDITING.structureLocked ? Promise.resolve({ ok: true }) : call('saveForm', [EDITING.meta.id, EDITING.schema]);
     save1.then(function () {
-      return call('setFormState', [EDITING.meta.id, { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage }]);
+      return call('setFormState', [EDITING.meta.id, { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage }]);
     }).then(function () { btn.disabled = false; btn.textContent = 'Save'; FormsUI.toast('Saved'); })
       .catch(function (e) {
         btn.disabled = false; btn.textContent = 'Save';

@@ -210,9 +210,17 @@
           { id:'pe', type:'email', label:'Email', required:true, prefillFrom:'parentEmail' },
           { id:'stu', type:'studentPicker', label:'Student', required:true },
           { id:'up', type:'file', label:'Upload the physical (PDF or photo)', required:true, accept:'.pdf,image/*', help:'Max 10 MB.' },
-          { id:'sig', type:'signature', label:'Parent signature', required:true, help:'Sign in the box; type your name below.' } ]}] } }
+          { id:'sig', type:'signature', label:'Parent signature', required:true, help:'Sign in the box; type your name below.' } ]}] } },
+      'demo-trip': { access:'open', form:{ id:'demo-trip', title:'Field Trip Request (demo)',
+        description:'Shows CONDITIONAL LOGIC — the overnight section appears only if you answer Yes.',
+        confirmationMessage:'Submitted for approval! (Demo.)', locked:false, reviewMode:false, pages:[{ title:'Main', fields:[
+          { id:'trip', type:'text', label:'Trip name / purpose', required:true },
+          { id:'dest', type:'text', label:'Destination', required:true },
+          { id:'overnight', type:'yesno', label:'Is this an overnight trip?', required:true },
+          { id:'lodging', type:'textarea', label:'Overnight lodging & chaperone plan', required:true, showIf:{ field:'overnight', op:'equals', value:'Yes' } },
+          { id:'transport', type:'dropdown', label:'Transportation', required:true, options:['School van','Charter bus','Parent drivers','Walking'] } ]}] } }
     };
-    var ORDER = ['demo-open','demo-parent','demo-conference','demo-physical'];
+    var ORDER = ['demo-open','demo-parent','demo-conference','demo-physical','demo-trip'];
     function qs(k){ return new URLSearchParams(location.search).get(k); }
     window.FORM_ID = qs('form') && FORMS[qs('form')] ? qs('form') : 'demo-open';
     window.PREVIEW = true;
@@ -383,6 +391,9 @@
 
     applyPrefill();
     initSignatures();
+    var fh = document.getElementById('fields');
+    if (fh) { fh.addEventListener('input', applyVisibility); fh.addEventListener('change', applyVisibility); }
+    applyVisibility();
     var so = document.getElementById('signOut'); if (so) so.addEventListener('click', signOut);
     if (!form.locked) document.getElementById('submitBtn').addEventListener('click', onSubmit);
 
@@ -518,6 +529,40 @@
   }
   function isMultiField(f) { return f.type === 'checkboxes' || ((f.type === 'studentPicker' || f.type === 'staffPicker') && f.multiple); }
 
+  // ---------- conditional logic (mirror of server Logic.js) ----------
+  function evalShowIf(rule, answers) {
+    if (!rule || !rule.field) return true;
+    var raw = answers ? answers[rule.field] : undefined;
+    var target = rule.value == null ? '' : String(rule.value);
+    if (Array.isArray(raw)) {
+      switch (rule.op) {
+        case 'contains': return raw.indexOf(target) > -1;
+        case 'notEmpty': return raw.length > 0;
+        case 'empty': return raw.length === 0;
+        case 'equals': return raw.join(', ') === target;
+        case 'notEquals': return raw.join(', ') !== target;
+        default: return true;
+      }
+    }
+    var val = raw == null ? '' : String(raw);
+    switch (rule.op) {
+      case 'equals': return val === target;
+      case 'notEquals': return val !== target;
+      case 'contains': return val.toLowerCase().indexOf(target.toLowerCase()) > -1;
+      case 'notEmpty': return val.trim() !== '';
+      case 'empty': return val.trim() === '';
+      default: return true;
+    }
+  }
+  function currentAnswers() { var a = {}; FIELDS.forEach(function (f) { a[f.id] = readValue(f); }); return a; }
+  function applyVisibility() {
+    var ans = currentAnswers();
+    FIELDS.forEach(function (f) {
+      var w = document.querySelector('[data-fid="' + f.id + '"]');
+      if (w) w.style.display = evalShowIf(f.showIf, ans) ? '' : 'none';
+    });
+  }
+
   // ---------- prefill ----------
   function selectedStudent() {
     var picker = FIELDS.filter(function (f) { return f.type === 'studentPicker'; })[0];
@@ -591,7 +636,10 @@
 
   function onSubmit() {
     var answers = {}, firstBad = null, ok = true;
+    var ans0 = currentAnswers(), vis = {};
+    FIELDS.forEach(function (f) { vis[f.id] = evalShowIf(f.showIf, ans0); });
     FIELDS.forEach(function (f) {
+      if (!vis[f.id]) return; // hidden by conditional logic — don't validate or submit
       var msg = '';
       if (f.type === 'file') {
         if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length)) msg = 'Please attach a file.';
