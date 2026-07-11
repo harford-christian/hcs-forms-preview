@@ -109,6 +109,7 @@
   .sigbar { margin-top:6px; }
   .filelist { margin-top:6px; }
   .filelist .fitem { display:flex; align-items:center; gap:8px; font-size:.82rem; color:var(--text); }
+  .desc-block { font-size:.9rem; color:var(--text); white-space:pre-wrap; line-height:1.5; margin:0; }
   .footer { text-align:center; color:var(--muted); font-size:.75rem; padding:22px 0 0; }
   @media (max-width:520px){ .card-pad{ padding:16px; } .page{ padding:14px 10px 48px; } }
 </style>
@@ -521,7 +522,10 @@
     }
     var body = '';
     if (f.type === 'sectionHeader' || f.type === 'description') {
-      body = '<input class="control" id="lbl_' + f.id + '" value="' + esc(f.label || '') + '" placeholder="' + (f.type === 'sectionHeader' ? 'Section title' : 'Text to display') + '">' +
+      var lblCtrl = f.type === 'description'
+        ? '<textarea class="control" id="lbl_' + f.id + '" placeholder="Text / policy content (line breaks are kept)">' + esc(f.label || '') + '</textarea>'
+        : '<input class="control" id="lbl_' + f.id + '" value="' + esc(f.label || '') + '" placeholder="Section title">';
+      body = lblCtrl +
         '<details class="adv"><summary>Conditional logic</summary><label class="lbl">Show this section only if…</label>' +
         '<div class="frow">' +
           '<select class="control" id="cif_' + f.id + '">' + condFieldOpts(f) + '</select>' +
