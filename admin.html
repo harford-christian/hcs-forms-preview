@@ -232,6 +232,12 @@
       {id:'up',type:'file',label:'Upload physical (PDF/photo)',required:true,accept:'.pdf,image/*'},{id:'sig',type:'signature',label:'Parent signature',required:true}]) });
     add('f-draft', {title:'Volunteer Signup (draft)', access:'open', lifecycle:'draft', submissions:0}, { title:'Volunteer Signup', description:'', settings:base('open'), pages:pg([
       {id:'n',type:'text',label:'Name',required:true},{id:'e',type:'email',label:'Email',required:true}]) });
+    add('f-homeschool', {title:'HCS Homeschool Opportunities Sign Up', access:'private', submissions:31, category:'Homeschool'}, { title:'HCS Homeschool Opportunities Sign Up', description:'A-la-carte homeschool sign-ups (specials, testing, MACS, events).', settings:base('private'), pages:pg([
+      {id:'pe',type:'email',label:'Parent email',required:true,prefillFrom:'parentEmail'},{id:'students',type:'studentPicker',label:'Which student(s)?',required:true,multiple:true},
+      {id:'umbrella',type:'yesno',label:'HCS Homeschool Umbrella?',required:true},{id:'tests',type:'checkboxes',label:'Standardized testing',options:['PSAT','SAT','MACS Academic Testing']}]) });
+    add('f-trip2', {title:'Pre-Approved Trip Request', access:'private', submissions:12, category:'Attendance'}, { title:'Pre-Approved Trip Request', description:'Pre-approval for a student absence.', settings:base('private'), pages:pg([
+      {id:'pe',type:'email',label:'Email',required:true,prefillFrom:'parentEmail'},{id:'students',type:'studentPicker',label:'Which student(s) will be absent?',required:true,multiple:true},
+      {id:'sd',type:'date',label:'First day of absence',required:true},{id:'ed',type:'date',label:'Last day of absence',required:true},{id:'sig',type:'signature',label:'Parent signature',required:true}]) });
     add('t-permission', {title:'Permission Slip', isTemplate:true, templateScope:'shared', layoutLock:'starter', lifecycle:'template', category:'General'}, { title:'Permission Slip', description:'Reusable permission slip.', settings:base('private'), pages:pg([
       {id:'pf',type:'text',label:'First name',required:true,prefillFrom:'parentFirst'},{id:'stu',type:'studentPicker',label:'Student',required:true},{id:'ok',type:'yesno',label:'I give permission.',required:true}]) });
     add('t-medical', {title:'Medical Authorization (locked)', isTemplate:true, templateScope:'shared', layoutLock:'useAsIs', lifecycle:'template', category:'Health'}, { title:'Medical Authorization', description:'Standardized medical authorization — used as-is.', settings:base('private'), pages:pg([

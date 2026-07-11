@@ -235,9 +235,33 @@
           { id:'h12', type:'sectionHeader', label:'12th Grade Courses', showIf:{field:'gradeReg',op:'equals',value:'12'} },
           { id:'m12', type:'radio', label:'Math', required:true, options:['Pre-Calculus','Calculus','Statistics'], showIf:{field:'gradeReg',op:'equals',value:'12'} },
           { id:'s12', type:'radio', label:'Science', required:true, options:['Physics','Anatomy & Physiology'], showIf:{field:'gradeReg',op:'equals',value:'12'} },
-          { id:'ssig', type:'signature', label:'Student signature', required:true } ]}] } }
+          { id:'ssig', type:'signature', label:'Student signature', required:true } ]}] } },
+      'demo-homeschool': { access:'private', form:{ id:'demo-homeschool', title:'Homeschool Opportunities Sign Up',
+        description:'Homeschool families sign up for HCS opportunities. Verify with any email + any 6-digit code.',
+        confirmationMessage:'Sign-up received! (Demo.)', locked:false, reviewMode:false, pages:[{ title:'Main', fields:[
+          { id:'secF', type:'sectionHeader', label:'Family' },
+          { id:'pf', type:'text', label:'Parent first name', required:true, prefillFrom:'parentFirst' },
+          { id:'pe', type:'email', label:'Parent email', required:true, prefillFrom:'parentEmail' },
+          { id:'students', type:'studentPicker', label:'Which student(s) are you signing up?', required:true, multiple:true },
+          { id:'umbrella', type:'yesno', label:'Are you enrolled in the HCS Homeschool Umbrella?', required:true },
+          { id:'secSp', type:'sectionHeader', label:'Specials Classes' },
+          { id:'specials', type:'checkboxes', label:'Select any specials classes', options:['Art','Music','Physical Education','Science Lab','Spanish'] },
+          { id:'secT', type:'sectionHeader', label:'Standardized Testing' },
+          { id:'tests', type:'checkboxes', label:'Which test(s)?', options:['PSAT','SAT','Iowa / Terra Nova','MACS Academic Testing'] },
+          { id:'pic', type:'radio', label:'Spring Picture Day', options:['Yes — order a package','Yes — digital only','No thank you'] } ]}] } },
+      'demo-preapproved': { access:'private', form:{ id:'demo-preapproved', title:'Pre-Approved Trip Request',
+        description:'Request pre-approval for a student absence. Verify with any email + any 6-digit code.',
+        confirmationMessage:'Trip request submitted! (Demo.)', locked:false, reviewMode:false, pages:[{ title:'Main', fields:[
+          { id:'secP', type:'sectionHeader', label:'Parent / guardian' },
+          { id:'pf', type:'text', label:'First name', required:true, prefillFrom:'parentFirst' },
+          { id:'pe', type:'email', label:'Email', required:true, prefillFrom:'parentEmail' },
+          { id:'students', type:'studentPicker', label:'Which student(s) will be absent?', required:true, multiple:true },
+          { id:'sd', type:'date', label:'First day of absence', required:true },
+          { id:'ed', type:'date', label:'Last day of absence', required:true },
+          { id:'reason', type:'textarea', label:'Reason / destination for the trip', required:true },
+          { id:'sig', type:'signature', label:'Parent / guardian signature', required:true } ]}] } }
     };
-    var ORDER = ['demo-open','demo-parent','demo-conference','demo-physical','demo-trip','demo-course'];
+    var ORDER = ['demo-open','demo-parent','demo-conference','demo-physical','demo-trip','demo-course','demo-homeschool','demo-preapproved'];
     function qs(k){ return new URLSearchParams(location.search).get(k); }
     window.FORM_ID = qs('form') && FORMS[qs('form')] ? qs('form') : 'demo-open';
     window.PREVIEW = true;
