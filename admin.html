@@ -208,7 +208,19 @@
         document.body.appendChild(ov); b.focus();
       });
     }
-    return { esc:esc, toast:toast, el:el, modal:modal };
+    function confirm(title, bodyHtml, okLabel){
+      return new Promise(function(resolve){
+        var ov=document.createElement('div'); ov.className='modal-overlay';
+        ov.innerHTML='<div class="modal" role="dialog" aria-modal="true" aria-label="'+esc(title)+'"><h3>'+esc(title)+'</h3><div class="mbody">'+bodyHtml+'</div>'+
+          '<div style="display:flex;gap:10px"><button class="btn ghost block" data-x="0" type="button">Cancel</button><button class="btn block" data-x="1" type="button">'+esc(okLabel||'OK')+'</button></div></div>';
+        function done(v){ ov.remove(); resolve(v); }
+        ov.querySelector('[data-x="0"]').onclick=function(){ done(false); };
+        ov.querySelector('[data-x="1"]').onclick=function(){ done(true); };
+        ov.addEventListener('keydown', function(e){ if(e.key==='Escape') done(false); });
+        document.body.appendChild(ov); ov.querySelector('[data-x="1"]').focus();
+      });
+    }
+    return { esc:esc, toast:toast, el:el, modal:modal, confirm:confirm };
   })();
 </script>
 
@@ -399,7 +411,7 @@
         '<div class="acts">' +
           btn('Edit', 'edit', m.id) + btn('Preview', 'preview', m.id, 'ghost') + btn('Responses', 'resp', m.id) +
           btn('Share', 'share', m.id, 'ghost') + btn('Duplicate', 'dup', m.id, 'ghost') +
-          btn('Save as template', 'tpl', m.id, 'ghost') +
+          btn('Save as template', 'tpl', m.id, 'ghost') + btn('Delete', 'del', m.id, 'ghost') +
         '</div></div>';
     }).join('') + '</div>';
     wireCardButtons();
@@ -415,6 +427,7 @@
         '<div class="pills">' + scope + lock + (m.category ? '<span class="pill draft">' + esc(m.category) + '</span>' : '') + '</div>' +
         '<div class="meta">by ' + esc(m.owner) + '</div>' +
         '<div class="acts">' + btn('Use this template', 'use', m.id) + btn('Preview', 'preview', m.id, 'ghost') +
+          (ME.isAdmin || m.owner.toLowerCase() === ME.email.toLowerCase() ? btn('Delete', 'del', m.id, 'ghost') : '') +
         '</div></div>';
     }).join('') + '</div>';
     wireCardButtons();
@@ -440,6 +453,7 @@
         if (act === 'dup') return doDuplicate(id);
         if (act === 'use') return doUse(id);
         if (act === 'tpl') return doSaveAsTemplate(id);
+        if (act === 'del') return doDelete(id);
       };
     });
   }
@@ -450,7 +464,21 @@
     call('createForm', [title]).then(function (r) { openEditor(r.formId); }).catch(alertErr);
   }
   function doUse(id) { call('createFromTemplate', [id]).then(function (r) { FormsUI.toast('Copied to your forms'); openEditor(r.formId); }).catch(alertErr); }
-  function doDuplicate(id) { call('duplicateForm', [id, {}]).then(function (r) { openEditor(r.formId); }).catch(alertErr); }
+  function doDuplicate(id) {
+    FormsUI.confirm('Duplicate this form?', 'This creates an editable copy as a new Draft in “My forms.”', 'Duplicate').then(function (ok) {
+      if (!ok) return;
+      call('duplicateForm', [id, {}]).then(function (r) { openEditor(r.formId); }).catch(alertErr);
+    });
+  }
+  function doDelete(id) {
+    FormsUI.confirm('Delete this form?', 'The form and any responses move to Drive trash (recoverable for ~30 days) and disappear from your dashboard. This can’t be undone from here.', 'Delete').then(function (ok) {
+      if (!ok) return;
+      call('deleteForm', [id]).then(function (res) {
+        if (res && res.ok) { FormsUI.toast('Form deleted'); loadList(); }
+        else alert((res && res.message) || 'Could not delete.');
+      }).catch(alertErr);
+    });
+  }
   function doPreview(id) {
     if (typeof window !== 'undefined' && window.PREVIEW) { window.open('fill.html', '_blank'); return; } // public demo
     var base = (ME && ME.execUrl) || '';
