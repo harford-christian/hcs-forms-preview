@@ -220,9 +220,23 @@
           { id:'dest', type:'text', label:'Destination', required:true },
           { id:'overnight', type:'yesno', label:'Is this an overnight trip?', required:true },
           { id:'lodging', type:'textarea', label:'Overnight lodging & chaperone plan', required:true, showIf:{ field:'overnight', op:'equals', value:'Yes' } },
-          { id:'transport', type:'dropdown', label:'Transportation', required:true, options:['School van','Charter bus','Parent drivers','Walking'] } ]}] } }
+          { id:'transport', type:'dropdown', label:'Transportation', required:true, options:['School van','Charter bus','Parent drivers','Walking'] } ]}] } },
+      'demo-course': { access:'private', form:{ id:'demo-course', title:'Course Selection Guide',
+        description:'Shows CONDITIONAL SECTIONS — choose a grade and only that grade’s courses appear. Verify with any email + any 6-digit code.',
+        confirmationMessage:'Course selections submitted! (Demo.)', locked:false, reviewMode:false, pages:[{ title:'Main', fields:[
+          { id:'secS', type:'sectionHeader', label:'Student & family' },
+          { id:'stu', type:'studentPicker', label:'Student', required:true },
+          { id:'pe', type:'email', label:'Parent email', required:true, prefillFrom:'parentEmail' },
+          { id:'gradeReg', type:'dropdown', label:'Which grade are you registering FOR (next year)?', required:true, options:['9','10','11','12'] },
+          { id:'h9', type:'sectionHeader', label:'9th Grade Courses', showIf:{field:'gradeReg',op:'equals',value:'9'} },
+          { id:'m9', type:'radio', label:'Math', required:true, options:['Algebra I','Geometry','Algebra II'], showIf:{field:'gradeReg',op:'equals',value:'9'} },
+          { id:'s9', type:'radio', label:'Science', required:true, options:['Physical Science','Biology'], showIf:{field:'gradeReg',op:'equals',value:'9'} },
+          { id:'h12', type:'sectionHeader', label:'12th Grade Courses', showIf:{field:'gradeReg',op:'equals',value:'12'} },
+          { id:'m12', type:'radio', label:'Math', required:true, options:['Pre-Calculus','Calculus','Statistics'], showIf:{field:'gradeReg',op:'equals',value:'12'} },
+          { id:'s12', type:'radio', label:'Science', required:true, options:['Physics','Anatomy & Physiology'], showIf:{field:'gradeReg',op:'equals',value:'12'} },
+          { id:'ssig', type:'signature', label:'Student signature', required:true } ]}] } }
     };
-    var ORDER = ['demo-open','demo-parent','demo-conference','demo-physical','demo-trip'];
+    var ORDER = ['demo-open','demo-parent','demo-conference','demo-physical','demo-trip','demo-course'];
     function qs(k){ return new URLSearchParams(location.search).get(k); }
     window.FORM_ID = qs('form') && FORMS[qs('form')] ? qs('form') : 'demo-open';
     window.PREVIEW = true;
@@ -252,7 +266,8 @@
   var app = document.getElementById('app');
   var TOKEN_KEY = 'hcsFormsToken';
   var TOKEN = null; try { TOKEN = localStorage.getItem(TOKEN_KEY); } catch (e) {}
-  var FIELDS = [];      // flat input-field metadata
+  var FIELDS = [];      // flat INPUT-field metadata (values + validation)
+  var VISALL = [];      // ALL fields incl. section headers/descriptions (for show/hide)
   var PREFILL = null;   // { parent:{first,last,email}, students:[...] } for verified parents
   var VIA = 'open';
   var otpEmail = '';
@@ -370,7 +385,7 @@
 
   // ---------- render form ----------
   function renderForm(form) {
-    FIELDS = [];
+    FIELDS = []; VISALL = [];
     var body = '<div class="card flush-top card-pad stack">';
     if (VIA === 'otp' && PREFILL && PREFILL.parent) {
       body += '<div class="notice info" style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
@@ -408,10 +423,10 @@
   }
 
   function renderField(f) {
-    if (f.type === 'sectionHeader') return FormsUI.el('div', { 'class': 'section-head' }, FormsUI.esc(f.label));
-    if (f.type === 'description') return FormsUI.el('p', { 'class': 'help' }, FormsUI.esc(f.label));
+    if (f.type === 'sectionHeader') { VISALL.push(f); return FormsUI.el('div', { 'class': 'section-head', 'data-fid': f.id }, FormsUI.esc(f.label)); }
+    if (f.type === 'description') { VISALL.push(f); return FormsUI.el('p', { 'class': 'help', 'data-fid': f.id }, FormsUI.esc(f.label)); }
 
-    FIELDS.push(f);
+    FIELDS.push(f); VISALL.push(f);
     var wrap = FormsUI.el('div', { 'class': 'field', 'data-fid': f.id });
     var lbl = '<label>' + FormsUI.esc(f.label) + (f.required ? '<span class="req">*</span>' : '') + '</label>';
     var name = 'f_' + f.id;
@@ -559,7 +574,7 @@
   function currentAnswers() { var a = {}; FIELDS.forEach(function (f) { a[f.id] = readValue(f); }); return a; }
   function applyVisibility() {
     var ans = currentAnswers();
-    FIELDS.forEach(function (f) {
+    VISALL.forEach(function (f) {
       var w = document.querySelector('[data-fid="' + f.id + '"]');
       if (w) w.style.display = evalShowIf(f.showIf, ans) ? '' : 'none';
     });

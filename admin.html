@@ -521,7 +521,12 @@
     }
     var body = '';
     if (f.type === 'sectionHeader' || f.type === 'description') {
-      body = '<input class="control" id="lbl_' + f.id + '" value="' + esc(f.label || '') + '" placeholder="' + (f.type === 'sectionHeader' ? 'Section title' : 'Text to display') + '">';
+      body = '<input class="control" id="lbl_' + f.id + '" value="' + esc(f.label || '') + '" placeholder="' + (f.type === 'sectionHeader' ? 'Section title' : 'Text to display') + '">' +
+        '<details class="adv"><summary>Conditional logic</summary><label class="lbl">Show this section only if…</label>' +
+        '<div class="frow">' +
+          '<select class="control" id="cif_' + f.id + '">' + condFieldOpts(f) + '</select>' +
+          '<select class="control" id="cop_' + f.id + '">' + condOpOpts(f.showIf) + '</select>' +
+          '<input class="control" id="cval_' + f.id + '" value="' + esc((f.showIf && f.showIf.value) || '') + '" placeholder="value"></div></details>';
     } else {
       body = '<input class="control" id="lbl_' + f.id + '" value="' + esc(f.label || '') + '" placeholder="Question label">' +
         '<div class="frow" style="margin-top:8px">' +
