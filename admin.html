@@ -1,0 +1,618 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HCS Forms — Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --hcs-red:#8B1E1E; --hcs-red-hover:#701818; --hcs-gold:#D4AF37; --hcs-gold-soft:#f6ecd0;
+    --bg:#f4f5f7; --card:#ffffff; --panel:#fbfafa;
+    --text:#2b2b2b; --muted:#6b7280; --line:#e2e4e8; --line-strong:#cfd3da;
+    --ok:#2e7d32; --ok-bg:#e8f5e9; --err:#b42318; --err-bg:#fdeceb; --warn:#b45309; --warn-bg:#fdf3e7;
+    --radius:12px; --radius-sm:9px;
+    --shadow:0 1px 2px rgba(16,24,40,.06), 0 6px 22px rgba(16,24,40,.06);
+    --ring:0 0 0 3px rgba(139,30,30,.16);
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; }
+  body { background:var(--bg); color:var(--text); line-height:1.5;
+    font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+
+  /* ---- layout ---- */
+  .page { max-width:680px; margin:0 auto; padding:24px 16px 64px; }
+  .page.wide { max-width:1080px; }
+  .brandbar { display:flex; align-items:center; gap:12px; background:var(--hcs-red); color:#fff;
+    padding:12px 18px; border-radius:var(--radius) var(--radius) 0 0; }
+  .brandbar .logo { height:34px; width:auto; background:#fff; border-radius:6px; padding:3px 5px; }
+  .brandbar .name { font-weight:800; letter-spacing:-.01em; font-size:1rem; }
+  .brandbar .spacer { margin-left:auto; }
+  .goldrule { height:4px; background:var(--hcs-gold); }
+
+  /* ---- card / surfaces ---- */
+  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); }
+  .card.flush-top { border-top-left-radius:0; border-top-right-radius:0; }
+  .card-pad { padding:22px; }
+  .stack > * + * { margin-top:16px; }
+  .divider { height:1px; background:var(--line); border:0; margin:20px 0; }
+
+  /* ---- headings / text ---- */
+  .form-title { font-size:1.5rem; font-weight:800; margin:0 0 4px; letter-spacing:-.02em; }
+  .form-desc { color:var(--muted); margin:0; }
+  .section-head { font-size:1.05rem; font-weight:700; color:var(--hcs-red); margin:8px 0 2px;
+    padding-bottom:6px; border-bottom:2px solid var(--hcs-gold-soft); }
+  .help { font-size:.83rem; color:var(--muted); margin:3px 0 0; }
+  .muted { color:var(--muted); } .center { text-align:center; }
+
+  /* ---- fields ---- */
+  .field { margin:0; }
+  .field > label { display:block; font-weight:600; font-size:.92rem; margin-bottom:6px; }
+  .req { color:var(--err); margin-left:2px; }
+  .control, input.control, select.control, textarea.control {
+    width:100%; font:inherit; font-size:1rem; color:var(--text); background:var(--card);
+    border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:10px 12px; transition:border-color .12s, box-shadow .12s; }
+  textarea.control { min-height:96px; resize:vertical; }
+  .control:focus, .control:focus-visible { outline:none; border-color:var(--hcs-red); box-shadow:var(--ring); }
+  .control:disabled, .control[readonly] { background:#f3f4f6; color:#4b5563; cursor:not-allowed; }
+  .field.invalid .control { border-color:var(--err); }
+  .field .error { display:none; color:var(--err); font-size:.82rem; margin-top:5px; }
+  .field.invalid .error { display:block; }
+
+  /* choice groups (radio/checkbox) */
+  .choices { display:flex; flex-direction:column; gap:8px; }
+  .choice { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border:1px solid var(--line);
+    border-radius:var(--radius-sm); cursor:pointer; background:var(--card); }
+  .choice:hover { border-color:var(--line-strong); }
+  .choice input { margin-top:2px; accent-color:var(--hcs-red); width:17px; height:17px; }
+  .choice.selected { border-color:var(--hcs-red); background:#fbf4f4; }
+
+  /* ---- buttons ---- */
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;
+    border:1px solid transparent; border-radius:var(--radius-sm); font-weight:700; font-size:.95rem;
+    padding:11px 18px; background:var(--hcs-red); color:#fff; transition:background .12s, box-shadow .12s; }
+  .btn:hover { background:var(--hcs-red-hover); }
+  .btn:focus-visible { outline:none; box-shadow:var(--ring); }
+  .btn:disabled { opacity:.55; cursor:not-allowed; }
+  .btn.block { width:100%; }
+  .btn.ghost { background:transparent; color:var(--hcs-red); border-color:var(--line-strong); }
+  .btn.ghost:hover { background:#fbf4f4; }
+  .btn.gold { background:var(--hcs-gold); color:#3a2e00; }
+  .btn.sm { padding:7px 12px; font-size:.85rem; }
+
+  /* ---- badges / pills (status system, reused from purchasing) ---- */
+  .pill { display:inline-block; font-size:.72rem; font-weight:700; padding:3px 10px; border-radius:999px; text-transform:capitalize; }
+  .pill.draft { background:#eef1f5; color:#475467; }
+  .pill.published, .pill.open, .pill.approved { background:var(--ok-bg); color:var(--ok); }
+  .pill.private { background:var(--hcs-gold-soft); color:#7a5b00; }
+  .pill.staff { background:#e7edfb; color:#2b4a9b; }
+  .pill.locked, .pill.closed, .pill.rejected { background:var(--err-bg); color:var(--err); }
+  .pill.pending { background:var(--warn-bg); color:var(--warn); }
+
+  /* ---- notices ---- */
+  .notice { border-radius:var(--radius-sm); padding:12px 14px; font-size:.9rem; }
+  .notice.info { background:var(--hcs-gold-soft); border:1px solid #ecd9a3; color:#6b5200; }
+  .notice.err { background:var(--err-bg); border:1px solid #f3c6c2; color:var(--err); }
+  .notice.ok { background:var(--ok-bg); border:1px solid #bfe0c1; color:var(--ok); }
+
+  /* ---- toast + spinner ---- */
+  .toast { position:fixed; left:50%; bottom:28px; transform:translateX(-50%); background:#1f2430; color:#fff;
+    padding:11px 18px; border-radius:999px; font-size:.88rem; font-weight:600; box-shadow:var(--shadow); z-index:60; }
+  .spinner { width:18px; height:18px; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%;
+    display:inline-block; animation:spin .7s linear infinite; }
+  .btn.ghost .spinner { border-color:rgba(139,30,30,.3); border-top-color:var(--hcs-red); }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .modal-overlay { position:fixed; inset:0; background:rgba(16,24,40,.5); display:flex; align-items:center; justify-content:center; z-index:70; padding:16px; }
+  .modal { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); max-width:440px; width:100%; padding:22px; }
+  .modal h3 { margin:0 0 8px; font-size:1.15rem; color:var(--hcs-red); }
+  .modal .mbody { margin:0 0 16px; color:var(--text); font-size:.92rem; line-height:1.5; }
+  .sigpad { border:1px dashed var(--line-strong); border-radius:var(--radius-sm); width:100%; height:180px; background:#fff; touch-action:none; display:block; }
+  .sigbar { margin-top:6px; }
+  .filelist { margin-top:6px; }
+  .filelist .fitem { display:flex; align-items:center; gap:8px; font-size:.82rem; color:var(--text); }
+  .footer { text-align:center; color:var(--muted); font-size:.75rem; padding:22px 0 0; }
+  @media (max-width:520px){ .card-pad{ padding:16px; } .page{ padding:14px 10px 48px; } }
+</style>
+<style>
+  #pvbar { position:sticky; top:0; z-index:80; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    background:#2b2b2b; color:#fff; padding:8px 14px; font-family:'Inter',sans-serif; }
+  #pvbar .pvtag { font-size:.66rem; font-weight:800; letter-spacing:.06em; background:var(--hcs-gold); color:#3a2e00; padding:3px 8px; border-radius:999px; }
+  #pvbar a, #pvbar .pvlink { color:#fff; font-size:.8rem; text-decoration:none; }
+  #pvbar select { font:inherit; padding:3px 6px; border-radius:6px; }
+  #pvbar .sp { margin-left:auto; }
+  .chooser { max-width:820px; margin:0 auto; padding:48px 16px; }
+  .chooser h1 { font-size:1.8rem; margin:0 0 6px; }
+  .chooser .cards { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:26px; }
+  @media (max-width:640px){ .chooser .cards { grid-template-columns:1fr; } }
+  .chooser a.choice-card { display:block; text-decoration:none; color:var(--text); background:var(--card);
+    border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:24px; transition:border-color .12s, transform .08s; }
+  .chooser a.choice-card:hover { border-color:var(--hcs-red); transform:translateY(-2px); }
+  .chooser .ic { font-size:2rem; }
+  .chooser h2 { margin:8px 0 4px; color:var(--hcs-red); font-size:1.2rem; }
+</style>
+<style>
+  .bwrap { max-width:1080px; margin:0 auto; padding:0 16px 64px; }
+  .topbar { display:flex; align-items:center; gap:12px; background:var(--hcs-red); color:#fff; padding:12px 18px; }
+  .topbar .logo { height:32px; background:#fff; border-radius:6px; padding:3px 5px; }
+  .topbar .name { font-weight:800; }
+  .topbar .who { margin-left:auto; font-size:.8rem; opacity:.92; display:flex; align-items:center; gap:8px; }
+  .adminchip { background:var(--hcs-gold); color:#3a2e00; font-size:.62rem; font-weight:800; padding:2px 7px; border-radius:999px; text-transform:uppercase; }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:18px 0; flex-wrap:wrap; }
+  .tab { padding:9px 14px; font-weight:600; font-size:.9rem; color:var(--muted); background:none; border:0; border-bottom:2px solid transparent; cursor:pointer; }
+  .tab.on { color:var(--hcs-red); border-bottom-color:var(--hcs-red); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+  .fcard { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; display:flex; flex-direction:column; gap:10px; }
+  .fcard h3 { margin:0; font-size:1.02rem; }
+  .fcard .meta { font-size:.78rem; color:var(--muted); }
+  .fcard .pills { display:flex; gap:6px; flex-wrap:wrap; }
+  .fcard .acts { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
+  .editor { display:grid; grid-template-columns:1fr 300px; gap:18px; align-items:start; }
+  @media (max-width:820px){ .editor { grid-template-columns:1fr; } }
+  .palette { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+  .palette button { font-size:.8rem; padding:6px 10px; border:1px solid var(--line-strong); border-radius:999px; background:var(--card); cursor:pointer; }
+  .palette button:hover { border-color:var(--hcs-red); color:var(--hcs-red); }
+  .fieldcard { border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px; margin-bottom:10px; background:var(--panel); }
+  .fieldcard .fchead { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .fieldcard .ftype { font-size:.66rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:800; background:#eef1f5; padding:2px 7px; border-radius:6px; }
+  .fieldcard .fcacts { margin-left:auto; display:flex; gap:4px; }
+  .iconbtn { border:1px solid var(--line-strong); background:var(--card); border-radius:7px; width:30px; height:30px; cursor:pointer; font-size:.9rem; line-height:1; }
+  .iconbtn:hover { border-color:var(--hcs-red); color:var(--hcs-red); }
+  .frow { display:flex; gap:8px; flex-wrap:wrap; }
+  .frow > * { flex:1; min-width:120px; }
+  .side { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; position:sticky; top:12px; }
+  .side h4 { margin:0 0 10px; font-size:.8rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+  .side label.lbl { display:block; font-size:.8rem; font-weight:600; margin:12px 0 4px; }
+  .switchrow { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:10px 0; font-size:.9rem; }
+  .toggle { position:relative; width:42px; height:24px; flex:none; }
+  .toggle input { opacity:0; width:0; height:0; }
+  .toggle .sl { position:absolute; inset:0; background:#cbd0d8; border-radius:999px; transition:.15s; }
+  .toggle .sl:before { content:''; position:absolute; width:18px; height:18px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.15s; }
+  .toggle input:checked + .sl { background:var(--hcs-red); }
+  .toggle input:checked + .sl:before { transform:translateX(18px); }
+  .rtable { width:100%; border-collapse:collapse; font-size:.82rem; }
+  .rtable th, .rtable td { border:1px solid var(--line); padding:6px 9px; text-align:left; vertical-align:top; }
+  .rtable th { background:var(--panel); font-weight:700; position:sticky; top:0; }
+  .adv { margin-top:8px; }
+  .adv summary { font-size:.78rem; color:var(--muted); cursor:pointer; }
+  .banner { background:var(--hcs-gold-soft); border:1px solid #ecd9a3; color:#6b5200; border-radius:var(--radius-sm); padding:10px 12px; font-size:.85rem; margin-bottom:14px; }
+</style>
+</head>
+<body>
+<div id="pvbar"></div>
+<div id="app"></div>
+<script>
+  /* FormsUI — tiny dependency-free client helpers shared by builder + runner. */
+  var FormsUI = (function () {
+    function esc(s){ var d=document.createElement('div'); d.textContent = (s==null?'':String(s)); return d.innerHTML; }
+    function toast(msg, ms){ var t=document.createElement('div'); t.className='toast'; t.textContent=msg;
+      document.body.appendChild(t); setTimeout(function(){ t.remove(); }, ms||2600); }
+    function el(tag, attrs, html){ var e=document.createElement(tag);
+      if(attrs) Object.keys(attrs).forEach(function(k){ e.setAttribute(k, attrs[k]); });
+      if(html!=null) e.innerHTML=html; return e; }
+    function modal(title, bodyHtml, btnLabel){
+      return new Promise(function(resolve){
+        var ov=document.createElement('div'); ov.className='modal-overlay';
+        ov.innerHTML='<div class="modal"><h3>'+esc(title)+'</h3><div class="mbody">'+bodyHtml+'</div><button class="btn block">'+esc(btnLabel||'Got it')+'</button></div>';
+        ov.querySelector('button').onclick=function(){ ov.remove(); resolve(); };
+        document.body.appendChild(ov);
+      });
+    }
+    return { esc:esc, toast:toast, el:el, modal:modal };
+  })();
+</script>
+
+<script>
+  (function () {
+    window.PREVIEW = true; window.STAFF_EMAIL = 'you@harfordchristian.org';
+    var idc = 100; function nid(p){ return (p||'f-new-')+(idc++); }
+    var ME = { email:'you@harfordchristian.org', isAdmin:true, name:'Demo Admin' };
+    function meta(o){ return Object.assign({ owner:ME.email, lifecycle:'published', access:'open', locked:false,
+      isTemplate:false, templateScope:'', layoutLock:'', category:'', responseSheetId:'demo', updatedAt:'2026-02-01', submissions:0 }, o); }
+    var STORE = {};
+    function add(id, m, schema){ schema.id=id; schema.settings=schema.settings||{}; STORE[id]={ meta:meta(Object.assign({id:id},m)), schema:schema }; }
+    function pg(fields){ return [{ title:'Main', fields:fields }]; }
+    function base(access){ return { access:access||'open', lifecycle:'published', locked:false, reviewMode:false, confirmationMessage:'Thank you — your response was recorded.', notifyEmails:[ME.email] }; }
+
+    add('f-interest', {title:'Sample Interest Form', access:'open', submissions:42}, { title:'Sample Interest Form', description:'Tell us about your interest in HCS.', settings:base('open'), pages:pg([
+      {id:'fn',type:'text',label:'First name',required:true},{id:'ln',type:'text',label:'Last name',required:true},
+      {id:'em',type:'email',label:'Email',required:true},{id:'g',type:'dropdown',label:'Grade of interest',options:['K4','K5','1','2','3','4','5','6','7','8','9','10','11','12']}]) });
+    add('f-trip', {title:'Field Trip Permission', access:'private', submissions:18}, { title:'Field Trip Permission', description:'Parent permission for the class trip.', settings:base('private'), pages:pg([
+      {id:'pf',type:'text',label:'First name',required:true,prefillFrom:'parentFirst'},{id:'pl',type:'text',label:'Last name',required:true,prefillFrom:'parentLast'},
+      {id:'pe',type:'email',label:'Your email',required:true,prefillFrom:'parentEmail'},{id:'stu',type:'studentPicker',label:'Which student(s)?',required:true,multiple:true},
+      {id:'perm',type:'yesno',label:'I give permission to attend.',required:true}]) });
+    add('f-conf', {title:'HS Parent/Teacher Conference', access:'private', submissions:63, category:'High School'}, { title:'HS Parent/Teacher Conference', description:'Request a conference.', settings:base('private'), pages:pg([
+      {id:'pf',type:'text',label:'First name',required:true,prefillFrom:'parentFirst'},{id:'pe',type:'email',label:'Email',required:true,prefillFrom:'parentEmail'},
+      {id:'stu',type:'studentPicker',label:'Student',required:true},{id:'teach',type:'staffPicker',label:'Teacher(s) to meet',required:true,multiple:true,staffLevel:'HS'},
+      {id:'t1',type:'dropdown',label:'First choice time',required:true,options:['Tue 3:00','Tue 3:20','Thu 3:00']}]) });
+    add('f-phys', {title:'Sports Physical Submission', access:'private', submissions:27, category:'Athletics'}, { title:'Sports Physical Submission', description:'Upload the completed physical.', settings:base('private'), pages:pg([
+      {id:'pe',type:'email',label:'Email',required:true,prefillFrom:'parentEmail'},{id:'stu',type:'studentPicker',label:'Student',required:true},
+      {id:'up',type:'file',label:'Upload physical (PDF/photo)',required:true,accept:'.pdf,image/*'},{id:'sig',type:'signature',label:'Parent signature',required:true}]) });
+    add('f-draft', {title:'Volunteer Signup (draft)', access:'open', lifecycle:'draft', submissions:0}, { title:'Volunteer Signup', description:'', settings:base('open'), pages:pg([
+      {id:'n',type:'text',label:'Name',required:true},{id:'e',type:'email',label:'Email',required:true}]) });
+    add('t-permission', {title:'Permission Slip', isTemplate:true, templateScope:'shared', layoutLock:'starter', lifecycle:'template', category:'General'}, { title:'Permission Slip', description:'Reusable permission slip.', settings:base('private'), pages:pg([
+      {id:'pf',type:'text',label:'First name',required:true,prefillFrom:'parentFirst'},{id:'stu',type:'studentPicker',label:'Student',required:true},{id:'ok',type:'yesno',label:'I give permission.',required:true}]) });
+    add('t-medical', {title:'Medical Authorization (locked)', isTemplate:true, templateScope:'shared', layoutLock:'useAsIs', lifecycle:'template', category:'Health'}, { title:'Medical Authorization', description:'Standardized medical authorization — used as-is.', settings:base('private'), pages:pg([
+      {id:'pe',type:'email',label:'Email',required:true,prefillFrom:'parentEmail'},{id:'stu',type:'studentPicker',label:'Student',required:true},{id:'sig',type:'signature',label:'Signature',required:true}]) });
+    add('t-mine', {title:'My Survey Starter', isTemplate:true, templateScope:'personal', layoutLock:'starter', lifecycle:'template'}, { title:'My Survey Starter', description:'', settings:base('open'), pages:pg([{id:'q',type:'textarea',label:'Your feedback'}]) });
+
+    function metas(pred){ return Object.keys(STORE).map(function(k){ return JSON.parse(JSON.stringify(STORE[k].meta)); }).filter(pred); }
+    function rows(n){ var o=[],names=['Jordan','Alex','Sam','Riley','Casey']; for(var i=0;i<n;i++) o.push(['SUB-'+(1000+i),'2/'+(i+1)+'/26 9:15 AM','parent'+i+'@example.com',names[i%5],'Sample','Submitted']); return o; }
+
+    var API = {
+      whoAmI: function(){ return ME; },
+      listMyForms: function(){ return metas(function(m){ return !m.isTemplate; }); },
+      listLibrary: function(){ return metas(function(m){ return m.isTemplate; }); },
+      listAllForms: function(){ return metas(function(){ return true; }); },
+      createForm: function(title){ var id=nid(); add(id,{title:title||'Untitled form',lifecycle:'draft'},{ title:title||'Untitled form', description:'', settings:base('open'), pages:pg([]) }); STORE[id].meta.lifecycle='draft'; return {ok:true,formId:id}; },
+      createFromTemplate: function(id){ return API.duplicateForm(id,{}); },
+      duplicateForm: function(id){ var src=STORE[id]; var n=nid(); var sc=JSON.parse(JSON.stringify(src.schema)); sc.id=n;
+        var lock=(src.meta.isTemplate && src.meta.layoutLock==='useAsIs')?'useAsIs':''; add(n,{title:sc.title,lifecycle:'draft',layoutLock:lock},sc); STORE[n].meta.lifecycle='draft'; return {ok:true,formId:n,layoutLock:lock}; },
+      loadFormForEdit: function(id){ var f=STORE[id]; return {ok:true, meta:JSON.parse(JSON.stringify(f.meta)), schema:JSON.parse(JSON.stringify(f.schema)), structureLocked:false, isAdmin:ME.isAdmin}; },
+      saveForm: function(id, schema){ STORE[id].schema=schema; STORE[id].meta.title=schema.title||STORE[id].meta.title; return {ok:true}; },
+      setFormState: function(id, st){ var m=STORE[id].meta; if(st.lifecycle)m.lifecycle=st.lifecycle; if(st.access)m.access=st.access; if(typeof st.locked==='boolean')m.locked=st.locked; return {ok:true,meta:JSON.parse(JSON.stringify(m))}; },
+      saveAsTemplate: function(id, opts){ var n=nid('t-new-'); var sc=JSON.parse(JSON.stringify(STORE[id].schema)); sc.id=n; add(n,{title:sc.title,isTemplate:true,templateScope:opts.scope,layoutLock:opts.layoutLock,lifecycle:'template'},sc); return {ok:true,templateId:n,scope:opts.scope,layoutLock:opts.layoutLock}; },
+      getShareUrl: function(id){ return {ok:true, url: location.href.replace(/admin\.html.*$/, 'fill.html?form=demo-open'), access: STORE[id].meta.access}; },
+      getResponses: function(id){ var m=STORE[id].meta; return {ok:true, headers:['SubmissionID','Timestamp','Email','First name','Last name','Status'], rows:rows(Math.min(6,m.submissions)), count:m.submissions, sheetUrl:''}; }
+    };
+    function runnerObj(){ var s=null,f=null; var o={ withSuccessHandler:function(fn){s=fn;return o;}, withFailureHandler:function(fn){f=fn;return o;} };
+      Object.keys(API).forEach(function(mm){ o[mm]=function(){ var a=arguments; setTimeout(function(){ try{ s&&s(API[mm].apply(null,a)); }catch(e){ f&&f(e); } },120); }; }); return o; }
+    window.google = { script: { get run(){ return runnerObj(); } } };
+    window.addEventListener('DOMContentLoaded', function(){
+      var bar=document.getElementById('pvbar');
+      bar.innerHTML='<span class="pvtag">PREVIEW · admin/backend · demo</span>'+
+        '<a class="sp" href="index.html">← All views</a>'+
+        '<a href="https://github.com/harford-christian/hcs-forms-preview/issues" target="_blank" style="margin-left:14px">Leave a comment ↗</a>';
+    });
+  })();
+</script>
+<script>
+(function () {
+  var app = document.getElementById('app');
+  var ME = null;                // { email, isAdmin, name }
+  var EDITING = null;           // { meta, schema, structureLocked }
+  var TAB = 'mine';
+  var FIELD_TYPES = [
+    ['sectionHeader', 'Section'], ['description', 'Text block'], ['text', 'Short text'],
+    ['textarea', 'Paragraph'], ['email', 'Email'], ['phone', 'Phone'], ['number', 'Number'],
+    ['date', 'Date'], ['dropdown', 'Dropdown'], ['radio', 'Multiple choice'],
+    ['checkboxes', 'Checkboxes'], ['yesno', 'Yes / No'],
+    ['studentPicker', 'Student picker'], ['staffPicker', 'Staff / teacher picker'],
+    ['file', 'File upload'], ['signature', 'Signature']
+  ];
+  var OPTION_TYPES = { dropdown: 1, radio: 1, checkboxes: 1 };
+  var esc = FormsUI.esc;
+
+  function call(fn, args) {
+    return new Promise(function (resolve, reject) {
+      var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+      runner[fn].apply(runner, args || []);
+    });
+  }
+  function uid() { return 'fld_' + Math.random().toString(36).slice(2, 8); }
+
+  // ---------- shell ----------
+  function chrome(inner) {
+    app.innerHTML =
+      '<div class="topbar">' +
+        '<img class="logo" src="https://harfordchristian.org/wp-content/uploads/2018/08/HCS-Logo-1.png" alt="HCS" onerror="this.style.display=\'none\'">' +
+        '<span class="name">HCS Forms</span>' +
+        '<span class="who">' + (ME ? esc(ME.email) + (ME.isAdmin ? ' <span class="adminchip">admin</span>' : '') : '') + '</span>' +
+      '</div><div class="goldrule"></div><div class="bwrap">' + inner + '</div>';
+  }
+
+  boot();
+  function boot() {
+    chrome('<p class="help" style="padding:24px">Loading…</p>');
+    call('whoAmI').then(function (me) { ME = me; renderDashboard(); })
+      .catch(function (e) { chrome('<div class="card card-pad"><h1 class="form-title">Access denied</h1><p class="form-desc">' + esc(String(e && e.message || e)) + '</p></div>'); });
+  }
+
+  // ---------- dashboard ----------
+  function renderDashboard() {
+    var tabs = '<div class="tabs">' +
+      tabBtn('mine', 'My forms') + tabBtn('library', 'Template library') +
+      (ME.isAdmin ? tabBtn('all', 'All forms') : '') + '</div>';
+    var header = '<div style="display:flex;align-items:center;gap:10px;margin-top:18px">' +
+      '<h1 class="form-title" style="margin:0">Forms</h1>' +
+      '<div style="margin-left:auto;display:flex;gap:8px">' +
+        '<button class="btn" id="newBlank">+ New form</button>' +
+        '<button class="btn ghost" id="newTpl">From template</button>' +
+      '</div></div>';
+    chrome(header + tabs + '<div id="list"><p class="help">Loading…</p></div>');
+    document.getElementById('newBlank').onclick = newBlank;
+    document.getElementById('newTpl').onclick = function () { TAB = 'library'; renderDashboard(); };
+    ['mine', 'library', 'all'].forEach(function (t) { var b = document.getElementById('tab_' + t); if (b) b.onclick = function () { TAB = t; renderDashboard(); }; });
+    loadList();
+  }
+  function tabBtn(id, label) { return '<button class="tab ' + (TAB === id ? 'on' : '') + '" id="tab_' + id + '">' + esc(label) + '</button>'; }
+
+  function loadList() {
+    var host = function () { return document.getElementById('list'); };
+    if (TAB === 'library') {
+      call('listLibrary').then(function (items) { renderLibrary(items); }).catch(err);
+    } else {
+      call(TAB === 'all' ? 'listAllForms' : 'listMyForms').then(function (items) { renderForms(items); }).catch(err);
+    }
+    function err(e) { host().innerHTML = '<div class="notice err">' + esc(String(e && e.message || e)) + '</div>'; }
+  }
+
+  function renderForms(items) {
+    var host = document.getElementById('list');
+    if (!items.length) { host.innerHTML = '<p class="help">No forms yet. Click “New form” to start.</p>'; return; }
+    host.innerHTML = '<div class="grid">' + items.map(function (m) {
+      return '<div class="fcard"><h3>' + esc(m.title || '(untitled)') + '</h3>' +
+        '<div class="pills">' + statePills(m) + '</div>' +
+        '<div class="meta">' + m.submissions + ' response' + (m.submissions === 1 ? '' : 's') +
+          (TAB === 'all' ? ' · ' + esc(m.owner) : '') + '</div>' +
+        '<div class="acts">' +
+          btn('Edit', 'edit', m.id) + btn('Responses', 'resp', m.id) +
+          btn('Share', 'share', m.id, 'ghost') + btn('Duplicate', 'dup', m.id, 'ghost') +
+          btn('Save as template', 'tpl', m.id, 'ghost') +
+        '</div></div>';
+    }).join('') + '</div>';
+    wireCardButtons();
+  }
+
+  function renderLibrary(items) {
+    var host = document.getElementById('list');
+    if (!items.length) { host.innerHTML = '<p class="help">No templates yet.</p>'; return; }
+    host.innerHTML = '<div class="grid">' + items.map(function (m) {
+      var lock = m.layoutLock === 'useAsIs' ? '<span class="pill locked">use as-is</span>' : '<span class="pill draft">starter</span>';
+      var scope = m.templateScope === 'shared' ? '<span class="pill staff">shared</span>' : '<span class="pill private">personal</span>';
+      return '<div class="fcard"><h3>' + esc(m.title || '(untitled)') + '</h3>' +
+        '<div class="pills">' + scope + lock + (m.category ? '<span class="pill draft">' + esc(m.category) + '</span>' : '') + '</div>' +
+        '<div class="meta">by ' + esc(m.owner) + '</div>' +
+        '<div class="acts">' + btn('Use this template', 'use', m.id) +
+          (ME.isAdmin || m.owner.toLowerCase() === ME.email.toLowerCase() ? btn('Preview', 'edit', m.id, 'ghost') : '') +
+        '</div></div>';
+    }).join('') + '</div>';
+    wireCardButtons();
+  }
+
+  function statePills(m) {
+    var p = '<span class="pill ' + m.lifecycle + '">' + m.lifecycle + '</span>' +
+            '<span class="pill ' + m.access + '">' + accessLabel(m.access) + '</span>';
+    if (m.locked) p += '<span class="pill locked">not accepting</span>';
+    return p;
+  }
+  function accessLabel(a) { return a === 'staff' ? 'staff-only' : a; }
+  function btn(label, act, id, cls) { return '<button class="btn ' + (cls || '') + ' sm" data-act="' + act + '" data-id="' + id + '">' + esc(label) + '</button>'; }
+
+  function wireCardButtons() {
+    document.querySelectorAll('[data-act]').forEach(function (b) {
+      b.onclick = function () {
+        var id = b.getAttribute('data-id'), act = b.getAttribute('data-act');
+        if (act === 'edit') return openEditor(id);
+        if (act === 'resp') return openResponses(id);
+        if (act === 'share') return doShare(id);
+        if (act === 'dup') return doDuplicate(id);
+        if (act === 'use') return doUse(id);
+        if (act === 'tpl') return doSaveAsTemplate(id);
+      };
+    });
+  }
+
+  function newBlank() {
+    var title = prompt('Name your new form:', 'Untitled form');
+    if (title === null) return;
+    call('createForm', [title]).then(function (r) { openEditor(r.formId); }).catch(alertErr);
+  }
+  function doUse(id) { call('createFromTemplate', [id]).then(function (r) { FormsUI.toast('Copied to your forms'); openEditor(r.formId); }).catch(alertErr); }
+  function doDuplicate(id) { call('duplicateForm', [id, {}]).then(function (r) { openEditor(r.formId); }).catch(alertErr); }
+  function doShare(id) {
+    call('getShareUrl', [id]).then(function (r) {
+      if (!r.url) return alert('Deploy the public URL first (Config tab). Access: ' + r.access);
+      window.prompt('Share this link (' + accessLabel(r.access) + '):', r.url);
+    }).catch(alertErr);
+  }
+  function doSaveAsTemplate(id) {
+    var scope = ME.isAdmin ? (confirm('Publish to the SHARED library for all staff?\n\nOK = shared · Cancel = personal') ? 'shared' : 'personal') : 'personal';
+    var useAsIs = confirm('Lock the layout so it must be used as-is?\n\nOK = use as-is (no edits) · Cancel = starter (copy & edit)');
+    call('saveAsTemplate', [id, { scope: scope, layoutLock: useAsIs ? 'useAsIs' : 'starter' }])
+      .then(function () { FormsUI.toast('Saved to ' + scope + ' library'); }).catch(alertErr);
+  }
+
+  // ---------- editor ----------
+  function openEditor(formId) {
+    chrome('<p class="help" style="padding:24px">Loading editor…</p>');
+    call('loadFormForEdit', [formId]).then(function (res) {
+      EDITING = { meta: res.meta, schema: normalizeSchema(res.schema), structureLocked: res.structureLocked, isAdmin: res.isAdmin };
+      renderEditor();
+    }).catch(function (e) { chrome('<div class="card card-pad"><p class="notice err">' + esc(String(e && e.message || e)) + '</p></div>'); });
+  }
+  function normalizeSchema(s) {
+    s = s || {}; s.settings = s.settings || {}; s.pages = s.pages && s.pages.length ? s.pages : [{ title: 'Main', fields: [] }];
+    s.pages[0].fields = s.pages[0].fields || [];
+    return s;
+  }
+  function fields() { return EDITING.schema.pages[0].fields; }
+
+  function renderEditor() {
+    var locked = EDITING.structureLocked;
+    var back = '<button class="btn ghost sm" id="back">← All forms</button>';
+    var palette = locked ? '' : '<div class="palette">' + FIELD_TYPES.map(function (t) {
+      return '<button data-type="' + t[0] + '">+ ' + esc(t[1]) + '</button>'; }).join('') + '</div>';
+    var lockBanner = locked ? '<div class="banner">This form’s layout is locked (use as-is). You can change its settings, but not its fields.</div>' : '';
+
+    chrome(
+      '<div style="display:flex;align-items:center;gap:10px;margin:16px 0">' + back +
+        '<h1 class="form-title" style="margin:0;font-size:1.2rem">Editing: ' + esc(EDITING.meta.title) + '</h1></div>' +
+      '<div class="editor"><div>' + lockBanner +
+        '<div class="field"><label>Form title</label><input class="control" id="fTitle" value="' + esc(EDITING.schema.title || '') + '"' + (locked ? ' readonly' : '') + '></div>' +
+        '<div class="field" style="margin-top:10px"><label>Description</label><textarea class="control" id="fDesc"' + (locked ? ' readonly' : '') + '>' + esc(EDITING.schema.description || '') + '</textarea></div>' +
+        '<div class="divider"></div>' + palette +
+        '<div id="canvas"></div>' +
+      '</div>' + sidePanel() + '</div>');
+
+    document.getElementById('back').onclick = renderDashboard;
+    if (!locked) {
+      document.querySelectorAll('.palette button').forEach(function (b) { b.onclick = function () { addField(b.getAttribute('data-type')); }; });
+      document.getElementById('fTitle').oninput = function () { EDITING.schema.title = this.value; };
+      document.getElementById('fDesc').oninput = function () { EDITING.schema.description = this.value; };
+    }
+    wireSide();
+    renderCanvas();
+  }
+
+  function renderCanvas() {
+    var host = document.getElementById('canvas');
+    var locked = EDITING.structureLocked;
+    var fs = fields();
+    if (!fs.length) { host.innerHTML = '<p class="help">No fields yet. Add one from the palette above' + (EDITING.structureLocked ? '' : '') + '.</p>'; return; }
+    host.innerHTML = fs.map(function (f, i) { return fieldCard(f, i, locked); }).join('');
+    if (locked) return;
+    fs.forEach(function (f, i) {
+      bindInput('lbl_' + f.id, function (v) { f.label = v; });
+      bindInput('help_' + f.id, function (v) { f.help = v; });
+      var reqEl = document.getElementById('req_' + f.id); if (reqEl) reqEl.onchange = function () { f.required = this.checked; };
+      var optEl = document.getElementById('opt_' + f.id); if (optEl) optEl.oninput = function () { f.options = this.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean); };
+      var pfEl = document.getElementById('pf_' + f.id); if (pfEl) pfEl.onchange = function () { f.prefillFrom = this.value; };
+      var multEl = document.getElementById('mult_' + f.id); if (multEl) multEl.onchange = function () { f.multiple = this.checked; };
+      var lvlEl = document.getElementById('lvl_' + f.id); if (lvlEl) lvlEl.onchange = function () { f.staffLevel = this.value; };
+      var accEl = document.getElementById('acc_' + f.id); if (accEl) accEl.oninput = function () { f.accept = this.value; };
+      document.getElementById('up_' + f.id).onclick = function () { move(i, -1); };
+      document.getElementById('dn_' + f.id).onclick = function () { move(i, 1); };
+      document.getElementById('del_' + f.id).onclick = function () { fields().splice(i, 1); renderCanvas(); };
+    });
+  }
+
+  function fieldCard(f, i, locked) {
+    var typeLabel = (FIELD_TYPES.filter(function (t) { return t[0] === f.type; })[0] || [f.type, f.type])[1];
+    if (locked) {
+      return '<div class="fieldcard"><div class="fchead"><span class="ftype">' + esc(typeLabel) + '</span><strong>' + esc(f.label || '') + '</strong>' + (f.required ? '<span class="req">*</span>' : '') + '</div></div>';
+    }
+    var body = '';
+    if (f.type === 'sectionHeader' || f.type === 'description') {
+      body = '<input class="control" id="lbl_' + f.id + '" value="' + esc(f.label || '') + '" placeholder="' + (f.type === 'sectionHeader' ? 'Section title' : 'Text to display') + '">';
+    } else {
+      body = '<input class="control" id="lbl_' + f.id + '" value="' + esc(f.label || '') + '" placeholder="Question label">' +
+        '<div class="frow" style="margin-top:8px">' +
+          '<input class="control" id="help_' + f.id + '" value="' + esc(f.help || '') + '" placeholder="Helper text (optional)">' +
+          '<label class="switchrow" style="flex:0 0 auto;margin:0"><span>Required</span><span class="toggle"><input type="checkbox" id="req_' + f.id + '"' + (f.required ? ' checked' : '') + '><span class="sl"></span></span></label>' +
+        '</div>';
+      if (OPTION_TYPES[f.type]) body += '<label class="lbl">Options (one per line)</label><textarea class="control" id="opt_' + f.id + '" placeholder="Option 1&#10;Option 2">' + esc((f.options || []).join('\n')) + '</textarea>';
+      if (f.type === 'studentPicker' || f.type === 'staffPicker' || f.type === 'file') {
+        body += '<label class="switchrow" style="margin-top:8px"><span>Allow ' + (f.type === 'file' ? 'multiple files' : 'choosing multiple') + '</span><span class="toggle"><input type="checkbox" id="mult_' + f.id + '"' + (f.multiple ? ' checked' : '') + '><span class="sl"></span></span></label>';
+      }
+      if (f.type === 'staffPicker') {
+        body += '<label class="lbl">Which staff to list</label><select class="control" id="lvl_' + f.id + '">' +
+          [['', 'All staff'], ['HS', 'High School'], ['MS', 'Middle School'], ['EL', 'Elementary']].map(function (o) {
+            return '<option value="' + o[0] + '"' + ((f.staffLevel || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+          '</select><p class="help">Pulled from the Staff tab in _System.</p>';
+      }
+      if (f.type === 'file') {
+        body += '<label class="lbl">Accepted file types (optional)</label><input class="control" id="acc_' + f.id + '" value="' + esc(f.accept || '') + '" placeholder=".pdf,image/*"><p class="help">Blank = any. Max 10 MB per file.</p>';
+      }
+      if (['studentPicker', 'staffPicker', 'file', 'signature'].indexOf(f.type) === -1) {
+        body += '<details class="adv"><summary>Advanced</summary><label class="lbl">Auto-fill from FACTS</label>' +
+          '<select class="control" id="pf_' + f.id + '">' + prefillOpts(f.prefillFrom) + '</select></details>';
+      }
+    }
+    return '<div class="fieldcard"><div class="fchead"><span class="ftype">' + esc(typeLabel) + '</span>' +
+      '<div class="fcacts"><button class="iconbtn" id="up_' + f.id + '" title="Move up">↑</button>' +
+      '<button class="iconbtn" id="dn_' + f.id + '" title="Move down">↓</button>' +
+      '<button class="iconbtn" id="del_' + f.id + '" title="Delete">✕</button></div></div>' + body + '</div>';
+  }
+  function prefillOpts(sel) {
+    return [['', '— none —'], ['parentFirst', 'Parent first name'], ['parentLast', 'Parent last name'],
+      ['parentEmail', 'Parent email (locked)'], ['studentGrade', 'Student grade'], ['studentName', 'Student name']]
+      .map(function (o) { return '<option value="' + o[0] + '"' + (sel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('');
+  }
+  function bindInput(id, cb) { var el = document.getElementById(id); if (el) el.oninput = function () { cb(this.value); }; }
+  function move(i, d) { var fs = fields(); var j = i + d; if (j < 0 || j >= fs.length) return; var t = fs[i]; fs[i] = fs[j]; fs[j] = t; renderCanvas(); }
+
+  function addField(type) {
+    var f = { id: uid(), type: type, label: '', required: false };
+    if (OPTION_TYPES[type]) f.options = ['Option 1'];
+    if (type === 'sectionHeader') f.label = 'Section title';
+    fields().push(f); renderCanvas();
+    setTimeout(function () { var el = document.getElementById('lbl_' + f.id); if (el) el.focus(); }, 30);
+  }
+
+  function addParentBlock() {
+    if (!confirm('Add the parent identity block?\n\nThis inserts First/Last name, a locked verified Email, and a student picker, and sets the form to Private (parents verify by email).')) return;
+    var blk = [
+      { id: uid(), type: 'sectionHeader', label: 'Parent / guardian' },
+      { id: uid(), type: 'text', label: 'First name', required: true, prefillFrom: 'parentFirst' },
+      { id: uid(), type: 'text', label: 'Last name', required: true, prefillFrom: 'parentLast' },
+      { id: uid(), type: 'email', label: 'Your email', required: true, prefillFrom: 'parentEmail', help: 'Verified — the email you sign in with.' },
+      { id: uid(), type: 'sectionHeader', label: 'Student' },
+      { id: uid(), type: 'studentPicker', label: 'Which student?', required: true, help: 'Only your students are listed.' },
+      { id: uid(), type: 'text', label: 'Grade', required: false, prefillFrom: 'studentGrade' }
+    ];
+    EDITING.schema.pages[0].fields = blk.concat(fields());
+    EDITING.schema.settings.access = 'private';
+    renderCanvas(); syncSideAccess();
+    FormsUI.toast('Parent block added · access set to Private');
+  }
+
+  // ---------- side settings panel ----------
+  function sidePanel() {
+    var s = EDITING.schema.settings, m = EDITING.meta;
+    return '<div class="side"><h4>Settings</h4>' +
+      '<label class="lbl">Access</label><select class="control" id="sAccess">' +
+        opt('open', 'Open (anyone with link)', s.access) + opt('private', 'Private (FACTS email)', s.access) + opt('staff', 'Staff only (SSO)', s.access) + '</select>' +
+      '<label class="lbl">Status</label><select class="control" id="sLife">' +
+        opt('draft', 'Draft', s.lifecycle) + opt('published', 'Published', s.lifecycle) + opt('closed', 'Closed', s.lifecycle) + '</select>' +
+      '<div class="switchrow"><span>Not accepting responses</span><span class="toggle"><input type="checkbox" id="sLock"' + (s.locked ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+      '<div class="switchrow"><span>Review mode — send both emails to the submitter</span><span class="toggle"><input type="checkbox" id="sReview"' + (s.reviewMode ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+      '<label class="lbl">Notify on submit (emails, comma-sep)</label><input class="control" id="sNotify" value="' + esc((s.notifyEmails || []).join(', ')) + '">' +
+      '<label class="lbl">Confirmation message</label><textarea class="control" id="sConfirm">' + esc(s.confirmationMessage || '') + '</textarea>' +
+      '<div class="divider"></div>' +
+      (EDITING.structureLocked ? '' : '<button class="btn gold block" id="btnParent" style="margin-bottom:8px">➕ This form is for Parents</button>') +
+      '<button class="btn block" id="btnSave">Save</button>' +
+      '<button class="btn ghost block" id="btnShare" style="margin-top:8px">Get share link</button>' +
+      '<button class="btn ghost block" id="btnResp" style="margin-top:8px">View responses</button>' +
+      '</div>';
+  }
+  function opt(v, label, sel) { return '<option value="' + v + '"' + (sel === v ? ' selected' : '') + '>' + esc(label) + '</option>'; }
+  function syncSideAccess() { var el = document.getElementById('sAccess'); if (el) el.value = EDITING.schema.settings.access; }
+
+  function wireSide() {
+    var s = EDITING.schema.settings;
+    document.getElementById('sAccess').onchange = function () { s.access = this.value; };
+    document.getElementById('sLife').onchange = function () { s.lifecycle = this.value; };
+    document.getElementById('sLock').onchange = function () { s.locked = this.checked; };
+    document.getElementById('sReview').onchange = function () { s.reviewMode = this.checked; };
+    document.getElementById('sNotify').oninput = function () { s.notifyEmails = this.value.split(',').map(function (x) { return x.trim(); }).filter(Boolean); };
+    document.getElementById('sConfirm').oninput = function () { s.confirmationMessage = this.value; };
+    var bp = document.getElementById('btnParent'); if (bp) bp.onclick = addParentBlock;
+    document.getElementById('btnSave').onclick = saveAll;
+    document.getElementById('btnShare').onclick = function () { doShare(EDITING.meta.id); };
+    document.getElementById('btnResp').onclick = function () { openResponses(EDITING.meta.id); };
+  }
+
+  function saveAll() {
+    var btn = document.getElementById('btnSave'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…';
+    var s = EDITING.schema.settings;
+    var save1 = EDITING.structureLocked ? Promise.resolve({ ok: true }) : call('saveForm', [EDITING.meta.id, EDITING.schema]);
+    save1.then(function () {
+      return call('setFormState', [EDITING.meta.id, { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage }]);
+    }).then(function () { btn.disabled = false; btn.textContent = 'Save'; FormsUI.toast('Saved'); })
+      .catch(function (e) {
+        btn.disabled = false; btn.textContent = 'Save';
+        alert(String(e && e.message || e) === 'LAYOUT_LOCKED' ? 'This form’s layout is locked and can’t be changed.' : String(e && e.message || e));
+      });
+  }
+
+  // ---------- responses ----------
+  function openResponses(formId) {
+    chrome('<p class="help" style="padding:24px">Loading responses…</p>');
+    call('getResponses', [formId, 100]).then(function (r) {
+      var head = '<div style="display:flex;align-items:center;gap:10px;margin:16px 0">' +
+        '<button class="btn ghost sm" id="back">← Back</button>' +
+        '<h1 class="form-title" style="margin:0;font-size:1.2rem">Responses (' + r.count + ')</h1>' +
+        (r.sheetUrl ? '<a class="btn ghost sm" style="margin-left:auto;text-decoration:none" target="_blank" href="' + esc(r.sheetUrl) + '">Open Sheet ↗</a>' : '') + '</div>';
+      var table = !r.rows.length ? '<p class="help">No responses yet.</p>' :
+        '<div style="overflow:auto"><table class="rtable"><thead><tr>' +
+          r.headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+          r.rows.map(function (row) { return '<tr>' + row.map(function (c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>'; }).join('') +
+          '</tbody></table></div>';
+      chrome(head + table);
+      document.getElementById('back').onclick = renderDashboard;
+    }).catch(alertErr);
+  }
+
+  function alertErr(e) { alert(String(e && e.message || e)); }
+})();
+</script>
+</body></html>
