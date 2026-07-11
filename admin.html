@@ -157,7 +157,17 @@
   .fcard h3 { margin:0; font-size:1.02rem; }
   .fcard .meta { font-size:.78rem; color:var(--muted); }
   .fcard .pills { display:flex; gap:6px; flex-wrap:wrap; }
-  .fcard .acts { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
+  .fcard .acts { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; align-items:center; }
+  .moremenu { position:relative; display:inline-block; }
+  .moremenu > .btn { display:inline-flex; align-items:center; gap:5px; }
+  .moremenu .menu { position:absolute; right:0; top:calc(100% + 4px); min-width:180px; background:var(--card); border:1px solid var(--line-strong); border-radius:10px; box-shadow:0 10px 26px rgba(0,0,0,.16); padding:5px; z-index:30; display:flex; flex-direction:column; gap:2px; }
+  .moremenu .menu[hidden] { display:none; }
+  .moremenu .menu button { display:flex; align-items:center; gap:9px; width:100%; text-align:left; background:none; border:0; border-radius:7px; padding:8px 10px; font:inherit; font-size:.85rem; cursor:pointer; color:var(--text); }
+  .moremenu .menu button:hover { background:var(--panel); }
+  .moremenu .menu button.danger { color:var(--hcs-red); }
+  .moremenu .menu button.danger:hover { background:#fbeaea; }
+  .btn.ghost.danger { color:var(--hcs-red); border-color:var(--hcs-red); background:none; }
+  .btn.ghost.danger:hover { background:#fbeaea; }
   .editor { display:grid; grid-template-columns:1fr 300px; gap:18px; align-items:start; }
   @media (max-width:820px){ .editor { grid-template-columns:1fr; } }
   .palette { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
@@ -273,6 +283,7 @@
       plus:'<path d="M12 5v14M5 12h14"/>',
       info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
       edit:'<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+      more:'<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>',
       grip:'<circle cx="9" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.3" fill="currentColor" stroke="none"/>'
     };
     function icon(name, opts){
@@ -340,6 +351,7 @@
       saveForm: function(id, schema){ STORE[id].schema=schema; STORE[id].meta.title=schema.title||STORE[id].meta.title; return {ok:true}; },
       setFormState: function(id, st){ var m=STORE[id].meta; if(st.lifecycle)m.lifecycle=st.lifecycle; if(st.access)m.access=st.access; if(typeof st.locked==='boolean')m.locked=st.locked; return {ok:true,meta:JSON.parse(JSON.stringify(m))}; },
       saveAsTemplate: function(id, opts){ var n=nid('t-new-'); var sc=JSON.parse(JSON.stringify(STORE[id].schema)); sc.id=n; add(n,{title:sc.title,isTemplate:true,templateScope:opts.scope,layoutLock:opts.layoutLock,lifecycle:'template'},sc); return {ok:true,templateId:n,scope:opts.scope,layoutLock:opts.layoutLock}; },
+      deleteForm: function(id){ delete STORE[id]; return {ok:true}; },
       getShareUrl: function(id){ return {ok:true, url: location.href.replace(/admin\.html.*$/, 'fill.html?form=demo-open'), access: STORE[id].meta.access}; },
       getResponses: function(id){ var m=STORE[id].meta; return {ok:true, headers:['SubmissionID','Timestamp','Email','First name','Last name','Status'], rows:rows(Math.min(6,m.submissions)), count:m.submissions, sheetUrl:''}; },
       getApprovalQueue: function(){ return {ok:true, items:[
@@ -488,15 +500,26 @@
     draw();
   }
   function formCardHtml(m) {
+    var id = m.id;
+    var canDel = ME.isAdmin || String(m.owner || '').toLowerCase() === ME.email.toLowerCase();
+    var menu =
+      menuItem('Duplicate', 'dup', id, 'dup') +
+      menuItem('Save as template', 'tpl', id, 'dup') +
+      (canDel ? menuItem('Delete', 'del', id, 'trash', 'danger') : '');
     return '<div class="fcard"><h3>' + esc(m.title || '(untitled)') + '</h3>' +
         '<div class="pills">' + statePills(m) + '</div>' +
         '<div class="meta">' + m.submissions + ' response' + (m.submissions === 1 ? '' : 's') +
           (TAB === 'all' ? ' · ' + esc(m.owner) : '') + '</div>' +
         '<div class="acts">' +
-          btn('Edit', 'edit', m.id) + btn('Preview', 'preview', m.id, 'ghost') + btn('Responses', 'resp', m.id) +
-          btn('Share', 'share', m.id, 'ghost') + btn('Duplicate', 'dup', m.id, 'ghost') +
-          btn('Save as template', 'tpl', m.id, 'ghost') + btn('Delete', 'del', m.id, 'ghost') +
+          btn('Edit', 'edit', id) + btn('Preview', 'preview', id, 'ghost') + btn('Responses', 'resp', id) + btn('Share', 'share', id, 'ghost') +
+          '<div class="moremenu">' +
+            '<button class="btn ghost sm" data-act="more" data-id="' + id + '" aria-haspopup="true" aria-expanded="false" title="More actions">' + FormsUI.icon('more') + ' More</button>' +
+            '<div class="menu" id="menu_' + id + '" hidden>' + menu + '</div>' +
+          '</div>' +
         '</div></div>';
+  }
+  function menuItem(label, act, id, iconName, cls) {
+    return '<button class="' + (cls || '') + '" data-act="' + act + '" data-id="' + id + '">' + FormsUI.icon(iconName, { size: 15 }) + esc(label) + '</button>';
   }
 
   function renderLibrary(items) {
@@ -509,7 +532,8 @@
         '<div class="pills">' + scope + lock + (m.category ? '<span class="pill draft">' + esc(m.category) + '</span>' : '') + '</div>' +
         '<div class="meta">by ' + esc(m.owner) + '</div>' +
         '<div class="acts">' + btn('Use this template', 'use', m.id) + btn('Preview', 'preview', m.id, 'ghost') +
-          (ME.isAdmin || m.owner.toLowerCase() === ME.email.toLowerCase() ? btn('Delete', 'del', m.id, 'ghost') : '') +
+          (ME.isAdmin || m.owner.toLowerCase() === ME.email.toLowerCase()
+            ? '<button class="btn ghost danger sm" data-act="del" data-id="' + m.id + '" title="Delete template" style="display:inline-flex;align-items:center;gap:5px">' + FormsUI.icon('trash', { size: 15 }) + ' Delete</button>' : '') +
         '</div></div>';
     }).join('') + '</div>';
     wireCardButtons();
@@ -524,10 +548,25 @@
   function accessLabel(a) { return a === 'staff' ? 'staff-only' : a; }
   function btn(label, act, id, cls) { return '<button class="btn ' + (cls || '') + ' sm" data-act="' + act + '" data-id="' + id + '">' + esc(label) + '</button>'; }
 
+  function closeMenus() {
+    document.querySelectorAll('.moremenu .menu').forEach(function (mn) { mn.setAttribute('hidden', 'hidden'); });
+    document.querySelectorAll('[data-act="more"]').forEach(function (bb) { bb.setAttribute('aria-expanded', 'false'); });
+  }
   function wireCardButtons() {
+    if (!window.__hcsMenuClose) { // close any open "More" menu when clicking outside it
+      window.__hcsMenuClose = true;
+      document.addEventListener('click', function (e) { if (!e.target.closest('.moremenu')) closeMenus(); });
+    }
     document.querySelectorAll('[data-act]').forEach(function (b) {
       b.onclick = function () {
         var id = b.getAttribute('data-id'), act = b.getAttribute('data-act');
+        if (act === 'more') {
+          var menu = document.getElementById('menu_' + id), wasHidden = menu && menu.hasAttribute('hidden');
+          closeMenus();
+          if (menu && wasHidden) { menu.removeAttribute('hidden'); b.setAttribute('aria-expanded', 'true'); }
+          return;
+        }
+        closeMenus();
         if (act === 'edit') return openEditor(id);
         if (act === 'preview') return doPreview(id);
         if (act === 'resp') return openResponses(id);
@@ -567,11 +606,11 @@
       call('duplicateForm', [id, {}]).then(function (r) { openEditor(r.formId); }).catch(alertErr);
     });
   }
-  function doDelete(id) {
+  function doDelete(id, after) {
     FormsUI.confirm('Delete this form?', 'The form and any responses move to Drive trash (recoverable for ~30 days) and disappear from your dashboard. This can’t be undone from here.', 'Delete').then(function (ok) {
       if (!ok) return;
       call('deleteForm', [id]).then(function (res) {
-        if (res && res.ok) { FormsUI.toast('Form deleted'); loadList(); }
+        if (res && res.ok) { DIRTY = false; FormsUI.toast('Form deleted'); (after || loadList)(); }
         else alert((res && res.message) || 'Could not delete.');
       }).catch(alertErr);
     });
@@ -924,6 +963,9 @@
       '<button class="btn ghost block" id="btnPreview" style="margin-top:8px">Preview as submitter</button>' +
       '<button class="btn ghost block" id="btnShare" style="margin-top:8px">Get share link</button>' +
       '<button class="btn ghost block" id="btnResp" style="margin-top:8px">View responses</button>' +
+      '<div class="divider"></div>' +
+      '<button class="btn ghost danger block" id="btnDelete" style="display:inline-flex;align-items:center;justify-content:center;gap:6px">' + FormsUI.icon('trash') + ' Delete this form</button>' +
+      '<p class="help" style="margin-top:6px">To simply stop accepting responses, set <strong>Status</strong> to Closed instead — the form and its data stay put.</p>' +
       '</div>';
   }
   function opt(v, label, sel) { return '<option value="' + v + '"' + (sel === v ? ' selected' : '') + '>' + esc(label) + '</option>'; }
@@ -957,6 +999,7 @@
     };
     document.getElementById('btnShare').onclick = function () { doShare(EDITING.meta.id); };
     document.getElementById('btnResp').onclick = function () { openResponses(EDITING.meta.id); };
+    var bd = document.getElementById('btnDelete'); if (bd) bd.onclick = function () { doDelete(EDITING.meta.id, function () { DIRTY = false; renderDashboard(); }); };
   }
 
   function stateFromSettings_(s) {
