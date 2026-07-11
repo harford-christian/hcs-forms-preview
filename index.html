@@ -108,6 +108,10 @@
   .modal { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); max-width:440px; width:100%; padding:22px; }
   .modal h3 { margin:0 0 8px; font-size:1.15rem; color:var(--hcs-red); }
   .modal .mbody { margin:0 0 16px; color:var(--text); font-size:.92rem; line-height:1.5; }
+  .sigpad { border:1px dashed var(--line-strong); border-radius:var(--radius-sm); width:100%; height:180px; background:#fff; touch-action:none; display:block; }
+  .sigbar { margin-top:6px; }
+  .filelist { margin-top:6px; }
+  .filelist .fitem { display:flex; align-items:center; gap:8px; font-size:.82rem; color:var(--text); }
   .footer { text-align:center; color:var(--muted); font-size:.75rem; padding:22px 0 0; }
   @media (max-width:520px){ .card-pad{ padding:16px; } .page{ padding:14px 10px 48px; } }
 </style>
@@ -193,10 +197,21 @@
           { id:'t1', type:'dropdown', label:'First choice — meeting time', required:true, options:slots },
           { id:'t2', type:'dropdown', label:'Second choice — meeting time', options:slots },
           { id:'t3', type:'dropdown', label:'Third choice — meeting time', options:slots },
-          { id:'info', type:'textarea', label:'Anything else we should know?' } ]}] } }
+          { id:'info', type:'textarea', label:'Anything else we should know?' } ]}] } },
+
+      'demo-physical': { access:'private', form:{ id:'demo-physical', title:'Sports Physical + Signature',
+        description:'Private demo showing file upload + e-signature. Verify with any email + any 6-digit code.',
+        confirmationMessage:'Received! (Demo.)', locked:false, reviewMode:true, pages:[{ title:'Main', fields:[
+          { id:'secP', type:'sectionHeader', label:'Parent / guardian' },
+          { id:'pf', type:'text', label:'First name', required:true, prefillFrom:'parentFirst' },
+          { id:'pl', type:'text', label:'Last name', required:true, prefillFrom:'parentLast' },
+          { id:'pe', type:'email', label:'Email', required:true, prefillFrom:'parentEmail' },
+          { id:'stu', type:'studentPicker', label:'Student', required:true },
+          { id:'up', type:'file', label:'Upload the physical (PDF or photo)', required:true, accept:'.pdf,image/*', help:'Max 10 MB.' },
+          { id:'sig', type:'signature', label:'Parent signature', required:true, help:'Sign in the box; type your name below.' } ]}] } }
     };
 
-    var ORDER = ['demo-open','demo-parent','demo-conference'];
+    var ORDER = ['demo-open','demo-parent','demo-conference','demo-physical'];
     function qs(k){ return new URLSearchParams(location.search).get(k); }
     window.FORM_ID = qs('form') && FORMS[qs('form')] ? qs('form') : 'demo-open';
     window.PREVIEW = true;
@@ -235,6 +250,8 @@
   var PREFILL = null;   // { parent:{first,last,email}, students:[...] } for verified parents
   var VIA = 'open';
   var otpEmail = '';
+  var ATTACH = {};      // fieldId -> [{ name, mimeType, b64 }] for file/signature fields
+  var SIG_DRAWN = {};   // fieldId -> true once the signature canvas has strokes
 
   loadForm();
 
@@ -369,6 +386,7 @@
     });
 
     applyPrefill();
+    initSignatures();
     var so = document.getElementById('signOut'); if (so) so.addEventListener('click', signOut);
     if (!form.locked) document.getElementById('submitBtn').addEventListener('click', onSubmit);
 
@@ -416,6 +434,15 @@
         ctrl = '<div class="choices">' + (f.options || []).map(function (o) {
           return '<label class="choice"><input type="checkbox" name="' + name + '" value="' + FormsUI.esc(o) + '"><span>' + FormsUI.esc(o) + '</span></label>';
         }).join('') + '</div>'; break;
+      case 'file': {
+        var acc = f.accept ? ' accept="' + FormsUI.esc(f.accept) + '"' : '';
+        ctrl = '<input class="control" type="file" id="' + name + '"' + (f.multiple ? ' multiple' : '') + acc + '><div class="filelist help" id="fl_' + f.id + '"></div>'; break;
+      }
+      case 'signature': {
+        ctrl = '<canvas class="sigpad" id="sig_' + f.id + '"></canvas>' +
+          '<div class="sigbar"><button type="button" class="btn ghost sm" id="sigclr_' + f.id + '">Clear</button></div>' +
+          '<input class="control" id="' + name + '" placeholder="Type your full name" style="margin-top:8px">'; break;
+      }
       case 'date':  ctrl = '<input class="control" type="date" id="' + name + '">'; break;
       case 'number':ctrl = '<input class="control" type="number" id="' + name + '" placeholder="' + FormsUI.esc(f.placeholder) + '">'; break;
       case 'email': ctrl = '<input class="control" type="email" id="' + name + '" placeholder="' + FormsUI.esc(f.placeholder) + '">'; break;
@@ -432,7 +459,54 @@
         else box.classList.add('selected');
       });
     });
+    var fileInp = wrap.querySelector('input[type="file"]');
+    if (fileInp) fileInp.addEventListener('change', function () { handleFiles(f, fileInp); });
+    var clr = wrap.querySelector('#sigclr_' + f.id);
+    if (clr) clr.addEventListener('click', function () { clearSignature(f.id); });
     return wrap;
+  }
+
+  // ---------- file uploads ----------
+  function handleFiles(f, input) {
+    var list = document.getElementById('fl_' + f.id);
+    var arr = Array.prototype.slice.call(input.files);
+    if (!f.multiple) arr = arr.slice(0, 1);
+    ATTACH[f.id] = [];
+    list.innerHTML = '';
+    arr.forEach(function (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        list.innerHTML += '<div class="fitem" style="color:var(--err)">' + FormsUI.esc(file.name) + ' — too large (max 10 MB)</div>';
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () { ATTACH[f.id].push({ name: file.name, mimeType: file.type || 'application/octet-stream', b64: String(reader.result).split(',')[1] }); };
+      reader.readAsDataURL(file);
+      list.innerHTML += '<div class="fitem">📎 ' + FormsUI.esc(file.name) + ' (' + Math.round(file.size / 1024) + ' KB)</div>';
+    });
+  }
+
+  // ---------- signature pad ----------
+  function initSignatures() {
+    FIELDS.forEach(function (f) { if (f.type === 'signature') { var c = document.getElementById('sig_' + f.id); if (c) setupSigPad(c, f.id); } });
+  }
+  function setupSigPad(canvas, fid) {
+    var ratio = window.devicePixelRatio || 1;
+    var w = canvas.clientWidth || 600, h = canvas.clientHeight || 180;
+    canvas.width = w * ratio; canvas.height = h * ratio;
+    var ctx = canvas.getContext('2d'); ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#1f2430';
+    var drawing = false, last = null;
+    function pos(e) { var r = canvas.getBoundingClientRect(); var p = (e.touches && e.touches[0]) || e; return { x: p.clientX - r.left, y: p.clientY - r.top }; }
+    function start(e) { e.preventDefault(); drawing = true; last = pos(e); }
+    function move(e) { if (!drawing) return; e.preventDefault(); var p = pos(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; SIG_DRAWN[fid] = true; }
+    function end() { drawing = false; }
+    canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+    canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); canvas.addEventListener('touchend', end);
+  }
+  function clearSignature(fid) { var c = document.getElementById('sig_' + fid); if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height); SIG_DRAWN[fid] = false; delete ATTACH[fid]; }
+  function captureSignature(f) {
+    if (SIG_DRAWN[f.id]) { var c = document.getElementById('sig_' + f.id); ATTACH[f.id] = [{ name: 'signature.png', mimeType: 'image/png', b64: c.toDataURL('image/png').split(',')[1] }]; }
+    else { delete ATTACH[f.id]; }
   }
 
   // dropdown (single) or checkbox group (multiple) shared by student/staff pickers
@@ -522,10 +596,18 @@
   function onSubmit() {
     var answers = {}, firstBad = null, ok = true;
     FIELDS.forEach(function (f) {
-      var v = readValue(f); answers[f.id] = v;
       var msg = '';
-      if (f.required && fieldEmpty(f, v)) msg = 'This field is required.';
-      else if (!fieldEmpty(f, v) && f.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) msg = 'Enter a valid email address.';
+      if (f.type === 'file') {
+        if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length)) msg = 'Please attach a file.';
+      } else if (f.type === 'signature') {
+        captureSignature(f);
+        answers[f.id] = readValue(f); // printed name (optional)
+        if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length)) msg = 'Please sign in the box.';
+      } else {
+        var v = readValue(f); answers[f.id] = v;
+        if (f.required && fieldEmpty(f, v)) msg = 'This field is required.';
+        else if (!fieldEmpty(f, v) && f.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) msg = 'Enter a valid email address.';
+      }
       setErr(f, msg);
       if (msg) { ok = false; if (!firstBad) firstBad = f; }
     });
@@ -540,7 +622,7 @@
     google.script.run
       .withSuccessHandler(onSubmitDone)
       .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = 'Submit'; formErr.style.display = 'block'; formErr.textContent = String(e && e.message || e); })
-      .submitForm(FORM_ID, answers, TOKEN);
+      .submitForm(FORM_ID, answers, TOKEN, ATTACH);
   }
 
   function onSubmitDone(res) {
