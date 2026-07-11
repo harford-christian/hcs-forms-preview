@@ -597,6 +597,12 @@ function computeCalc(field, answers) {
       body += '<div class="notice info" style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
         '<span>Signed in as <strong>' + FormsUI.esc(PREFILL.parent.email) + '</strong></span>' +
         '<button id="signOut" class="btn ghost sm" type="button">Not you?</button></div>';
+    } else if (TOKEN && !IS_EDIT) {
+      // A parent session is still stored on this device (e.g. a shared/library computer) even though
+      // this form didn't need it — always offer a way to clear it so the next person starts fresh.
+      body += '<div class="notice info" style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+        '<span>You’re still signed in on this device from a previous form.</span>' +
+        '<button id="signOut" class="btn ghost sm" type="button">Sign out</button></div>';
     }
     body += '<div><h1 class="form-title">' + FormsUI.esc(form.title) + '</h1>' +
             (form.description ? '<p class="form-desc">' + FormsUI.esc(form.description) + '</p>' : '') + '</div>';
