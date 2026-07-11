@@ -1,4 +1,5 @@
 <!DOCTYPE html><html lang="en"><head>
+<meta name="theme-color" content="#8B1E1E">
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HCS Forms — Preview</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -62,7 +63,8 @@
   .choice { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border:1px solid var(--line);
     border-radius:var(--radius-sm); cursor:pointer; background:var(--card); }
   .choice:hover { border-color:var(--line-strong); }
-  .choice input { margin-top:2px; accent-color:var(--hcs-red); width:17px; height:17px; }
+  .choice:focus-within { border-color:var(--hcs-red); box-shadow:var(--ring); }
+  .choice input { margin-top:2px; accent-color:var(--hcs-red); width:18px; height:18px; }
   .choice.selected { border-color:var(--hcs-red); background:#fbf4f4; }
 
   /* ---- buttons ---- */
@@ -141,7 +143,7 @@
   /* FormsUI — tiny dependency-free client helpers shared by builder + runner. */
   var FormsUI = (function () {
     function esc(s){ var d=document.createElement('div'); d.textContent = (s==null?'':String(s)); return d.innerHTML; }
-    function toast(msg, ms){ var t=document.createElement('div'); t.className='toast'; t.textContent=msg;
+    function toast(msg, ms){ var t=document.createElement('div'); t.className='toast'; t.setAttribute('role','status'); t.setAttribute('aria-live','polite'); t.textContent=msg;
       document.body.appendChild(t); setTimeout(function(){ t.remove(); }, ms||2600); }
     function el(tag, attrs, html){ var e=document.createElement(tag);
       if(attrs) Object.keys(attrs).forEach(function(k){ e.setAttribute(k, attrs[k]); });
@@ -149,9 +151,11 @@
     function modal(title, bodyHtml, btnLabel){
       return new Promise(function(resolve){
         var ov=document.createElement('div'); ov.className='modal-overlay';
-        ov.innerHTML='<div class="modal"><h3>'+esc(title)+'</h3><div class="mbody">'+bodyHtml+'</div><button class="btn block">'+esc(btnLabel||'Got it')+'</button></div>';
-        ov.querySelector('button').onclick=function(){ ov.remove(); resolve(); };
-        document.body.appendChild(ov);
+        ov.innerHTML='<div class="modal" role="dialog" aria-modal="true" aria-label="'+esc(title)+'"><h3>'+esc(title)+'</h3><div class="mbody">'+bodyHtml+'</div><button class="btn block">'+esc(btnLabel||'Got it')+'</button></div>';
+        var b=ov.querySelector('button');
+        b.onclick=function(){ ov.remove(); resolve(); };
+        ov.addEventListener('keydown', function(e){ if(e.key==='Escape'){ ov.remove(); resolve(); } });
+        document.body.appendChild(ov); b.focus();
       });
     }
     return { esc:esc, toast:toast, el:el, modal:modal };
@@ -350,8 +354,8 @@
       '<div class="card flush-top card-pad stack">' +
         '<div><h1 class="form-title">Verify your email</h1>' +
         '<p class="form-desc">Enter the email Harford Christian has on file. We’ll send you a 6-digit code.</p></div>' +
-        '<div class="field"><label>Email address</label><input class="control" id="otpEmail" type="email" placeholder="you@example.com"></div>' +
-        '<div id="otpErr" class="notice err" style="display:none"></div>' +
+        '<div class="field"><label for="otpEmail">Email address</label><input class="control" id="otpEmail" type="email" autocomplete="email" placeholder="you@example.com"></div>' +
+        '<div id="otpErr" class="notice err" role="alert" style="display:none"></div>' +
         '<button id="otpSend" class="btn block" type="button">Send code</button>' +
       '</div>');
     document.getElementById('otpSend').addEventListener('click', sendCode);
@@ -373,8 +377,8 @@
       '<div class="card flush-top card-pad stack">' +
         '<div><h1 class="form-title">Enter your code</h1>' +
         '<p class="form-desc">If <strong>' + FormsUI.esc(otpEmail) + '</strong> is on file, a 6-digit code is on its way. It expires in 10 minutes.</p></div>' +
-        '<div class="field"><label>6-digit code</label><input class="control" id="otpCode" inputmode="numeric" maxlength="6" placeholder="000000"></div>' +
-        '<div id="otpErr" class="notice err" style="display:none"></div>' +
+        '<div class="field"><label for="otpCode">6-digit code</label><input class="control" id="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"></div>' +
+        '<div id="otpErr" class="notice err" role="alert" style="display:none"></div>' +
         '<button id="otpVerify" class="btn block" type="button">Verify</button>' +
         '<button id="otpBack" class="btn ghost block" type="button">Use a different email</button>' +
       '</div>');
@@ -421,7 +425,7 @@
             (form.description ? '<p class="form-desc">' + FormsUI.esc(form.description) + '</p>' : '') + '</div>';
     if (form.locked) body += '<div class="notice err">This form is not currently accepting responses.</div>';
     body += '<div id="fields" class="stack"></div>';
-    body += '<div id="formErr" class="notice err" style="display:none"></div>';
+    body += '<div id="formErr" class="notice err" role="alert" style="display:none"></div>';
     if (!form.locked) body += '<button id="submitBtn" class="btn block" type="button">Submit</button>';
     body += '</div>';
     shell(body);
@@ -453,7 +457,7 @@
 
     FIELDS.push(f); VISALL.push(f);
     var wrap = FormsUI.el('div', { 'class': 'field', 'data-fid': f.id });
-    var lbl = '<label>' + FormsUI.esc(f.label) + (f.required ? '<span class="req">*</span>' : '') + '</label>';
+    var lbl = '<label id="lbl-' + f.id + '" class="fieldlabel">' + FormsUI.esc(f.label) + (f.required ? '<span class="req" aria-hidden="true">*</span>' : '') + '</label>';
     var name = 'f_' + f.id;
     var ctrl = '';
 
@@ -498,7 +502,7 @@
       case 'phone': ctrl = '<input class="control" type="tel" id="' + name + '" placeholder="' + FormsUI.esc(f.placeholder) + '">'; break;
       default:      ctrl = '<input class="control" type="text" id="' + name + '" placeholder="' + FormsUI.esc(f.placeholder) + '">';
     }
-    wrap.innerHTML = lbl + ctrl + (f.help ? '<p class="help">' + FormsUI.esc(f.help) + '</p>' : '') + '<p class="error"></p>';
+    wrap.innerHTML = lbl + ctrl + (f.help ? '<p class="help">' + FormsUI.esc(f.help) + '</p>' : '') + '<p class="error" id="err-' + f.id + '"></p>';
 
     wrap.querySelectorAll('.choice input').forEach(function (inp) {
       inp.addEventListener('change', function () {
@@ -512,6 +516,15 @@
     if (fileInp) fileInp.addEventListener('change', function () { handleFiles(f, fileInp); });
     var clr = wrap.querySelector('#sigclr_' + f.id);
     if (clr) clr.addEventListener('click', function () { clearSignature(f.id); });
+
+    // accessibility: associate label, mark required, describe errors, group choices
+    var lblEl = wrap.querySelector('label.fieldlabel');
+    var primary = wrap.querySelector('#f_' + f.id);            // null for choice-group fields
+    var grp = wrap.querySelector('.choices');
+    if (grp) { grp.setAttribute('role', 'group'); grp.setAttribute('aria-labelledby', 'lbl-' + f.id); }
+    if (primary && lblEl) lblEl.setAttribute('for', 'f_' + f.id);
+    if (primary) { if (f.required) primary.setAttribute('aria-required', 'true'); primary.setAttribute('aria-describedby', 'err-' + f.id); }
+    var canv = wrap.querySelector('canvas'); if (canv) { canv.setAttribute('role', 'img'); canv.setAttribute('aria-label', (f.label || 'Signature') + ' — draw with mouse or finger'); }
     return wrap;
   }
 
@@ -674,6 +687,8 @@
     if (!wrap) return;
     wrap.classList.toggle('invalid', !!msg);
     wrap.querySelector('.error').textContent = msg || '';
+    var primary = wrap.querySelector('#f_' + f.id) || wrap.querySelector('.choices');
+    if (primary) { if (msg) primary.setAttribute('aria-invalid', 'true'); else primary.removeAttribute('aria-invalid'); }
   }
 
   function onSubmit() {

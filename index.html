@@ -1,4 +1,5 @@
 <!DOCTYPE html><html lang="en"><head>
+<meta name="theme-color" content="#8B1E1E">
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HCS Forms — Preview</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -62,7 +63,8 @@
   .choice { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border:1px solid var(--line);
     border-radius:var(--radius-sm); cursor:pointer; background:var(--card); }
   .choice:hover { border-color:var(--line-strong); }
-  .choice input { margin-top:2px; accent-color:var(--hcs-red); width:17px; height:17px; }
+  .choice:focus-within { border-color:var(--hcs-red); box-shadow:var(--ring); }
+  .choice input { margin-top:2px; accent-color:var(--hcs-red); width:18px; height:18px; }
   .choice.selected { border-color:var(--hcs-red); background:#fbf4f4; }
 
   /* ---- buttons ---- */

@@ -1,4 +1,5 @@
 <!DOCTYPE html><html lang="en"><head>
+<meta name="theme-color" content="#8B1E1E">
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HCS Forms — Preview</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -62,7 +63,8 @@
   .choice { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border:1px solid var(--line);
     border-radius:var(--radius-sm); cursor:pointer; background:var(--card); }
   .choice:hover { border-color:var(--line-strong); }
-  .choice input { margin-top:2px; accent-color:var(--hcs-red); width:17px; height:17px; }
+  .choice:focus-within { border-color:var(--hcs-red); box-shadow:var(--ring); }
+  .choice input { margin-top:2px; accent-color:var(--hcs-red); width:18px; height:18px; }
   .choice.selected { border-color:var(--hcs-red); background:#fbf4f4; }
 
   /* ---- buttons ---- */
@@ -135,12 +137,14 @@
   .topbar { display:flex; align-items:center; gap:12px; background:var(--hcs-red); color:#fff; padding:12px 18px; }
   .topbar .logo { height:32px; background:#fff; border-radius:6px; padding:3px 5px; }
   .topbar .name { font-weight:800; }
-  .topbar .who { margin-left:auto; font-size:.8rem; opacity:.92; display:flex; align-items:center; gap:8px; }
+  .topbar .who { margin-left:auto; font-size:.8rem; opacity:.92; display:flex; align-items:center; gap:8px; min-width:0; }
+  .topbar .who span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  @media (max-width:520px){ .bwrap { padding:0 10px 48px; } .topbar { padding:10px 12px; } .editor { gap:12px; } }
   .adminchip { background:var(--hcs-gold); color:#3a2e00; font-size:.62rem; font-weight:800; padding:2px 7px; border-radius:999px; text-transform:uppercase; }
   .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:18px 0; flex-wrap:wrap; }
   .tab { padding:9px 14px; font-weight:600; font-size:.9rem; color:var(--muted); background:none; border:0; border-bottom:2px solid transparent; cursor:pointer; }
   .tab.on { color:var(--hcs-red); border-bottom-color:var(--hcs-red); }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr)); gap:14px; }
   .fcard { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; display:flex; flex-direction:column; gap:10px; }
   .fcard h3 { margin:0; font-size:1.02rem; }
   .fcard .meta { font-size:.78rem; color:var(--muted); }
@@ -186,7 +190,7 @@
   /* FormsUI — tiny dependency-free client helpers shared by builder + runner. */
   var FormsUI = (function () {
     function esc(s){ var d=document.createElement('div'); d.textContent = (s==null?'':String(s)); return d.innerHTML; }
-    function toast(msg, ms){ var t=document.createElement('div'); t.className='toast'; t.textContent=msg;
+    function toast(msg, ms){ var t=document.createElement('div'); t.className='toast'; t.setAttribute('role','status'); t.setAttribute('aria-live','polite'); t.textContent=msg;
       document.body.appendChild(t); setTimeout(function(){ t.remove(); }, ms||2600); }
     function el(tag, attrs, html){ var e=document.createElement(tag);
       if(attrs) Object.keys(attrs).forEach(function(k){ e.setAttribute(k, attrs[k]); });
@@ -194,9 +198,11 @@
     function modal(title, bodyHtml, btnLabel){
       return new Promise(function(resolve){
         var ov=document.createElement('div'); ov.className='modal-overlay';
-        ov.innerHTML='<div class="modal"><h3>'+esc(title)+'</h3><div class="mbody">'+bodyHtml+'</div><button class="btn block">'+esc(btnLabel||'Got it')+'</button></div>';
-        ov.querySelector('button').onclick=function(){ ov.remove(); resolve(); };
-        document.body.appendChild(ov);
+        ov.innerHTML='<div class="modal" role="dialog" aria-modal="true" aria-label="'+esc(title)+'"><h3>'+esc(title)+'</h3><div class="mbody">'+bodyHtml+'</div><button class="btn block">'+esc(btnLabel||'Got it')+'</button></div>';
+        var b=ov.querySelector('button');
+        b.onclick=function(){ ov.remove(); resolve(); };
+        ov.addEventListener('keydown', function(e){ if(e.key==='Escape'){ ov.remove(); resolve(); } });
+        document.body.appendChild(ov); b.focus();
       });
     }
     return { esc:esc, toast:toast, el:el, modal:modal };
