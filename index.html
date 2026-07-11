@@ -104,6 +104,10 @@
   .btn.ghost .spinner { border-color:rgba(139,30,30,.3); border-top-color:var(--hcs-red); }
   @keyframes spin { to { transform:rotate(360deg); } }
 
+  .modal-overlay { position:fixed; inset:0; background:rgba(16,24,40,.5); display:flex; align-items:center; justify-content:center; z-index:70; padding:16px; }
+  .modal { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); max-width:440px; width:100%; padding:22px; }
+  .modal h3 { margin:0 0 8px; font-size:1.15rem; color:var(--hcs-red); }
+  .modal .mbody { margin:0 0 16px; color:var(--text); font-size:.92rem; line-height:1.5; }
   .footer { text-align:center; color:var(--muted); font-size:.75rem; padding:22px 0 0; }
   @media (max-width:520px){ .card-pad{ padding:16px; } .page{ padding:14px 10px 48px; } }
 </style>
@@ -127,7 +131,15 @@
     function el(tag, attrs, html){ var e=document.createElement(tag);
       if(attrs) Object.keys(attrs).forEach(function(k){ e.setAttribute(k, attrs[k]); });
       if(html!=null) e.innerHTML=html; return e; }
-    return { esc:esc, toast:toast, el:el };
+    function modal(title, bodyHtml, btnLabel){
+      return new Promise(function(resolve){
+        var ov=document.createElement('div'); ov.className='modal-overlay';
+        ov.innerHTML='<div class="modal"><h3>'+esc(title)+'</h3><div class="mbody">'+bodyHtml+'</div><button class="btn block">'+esc(btnLabel||'Got it')+'</button></div>';
+        ov.querySelector('button').onclick=function(){ ov.remove(); resolve(); };
+        document.body.appendChild(ov);
+      });
+    }
+    return { esc:esc, toast:toast, el:el, modal:modal };
   })();
 </script>
 
@@ -144,7 +156,7 @@
     var FORMS = {
       'demo-open': { access:'open', form:{ id:'demo-open', title:'Sample Interest Form',
         description:'A quick demo (open — no login). This is fabricated data for review only.',
-        confirmationMessage:'Thanks! (Demo — nothing was saved.)', locked:false, pages:[{ title:'Main', fields:[
+        confirmationMessage:'Thanks! (Demo — nothing was saved.)', locked:false, reviewMode:true, pages:[{ title:'Main', fields:[
           { id:'sec1', type:'sectionHeader', label:'Your details' },
           { id:'fn', type:'text', label:'First name', required:true },
           { id:'ln', type:'text', label:'Last name', required:true },
@@ -156,7 +168,7 @@
 
       'demo-parent': { access:'private', form:{ id:'demo-parent', title:'Field Trip Permission',
         description:'Private demo — verify with any email + any 6-digit code to see auto-prefill (fabricated family).',
-        confirmationMessage:'Thank you — permission recorded. (Demo.)', locked:false, pages:[{ title:'Main', fields:[
+        confirmationMessage:'Thank you — permission recorded. (Demo.)', locked:false, reviewMode:true, pages:[{ title:'Main', fields:[
           { id:'secP', type:'sectionHeader', label:'Parent / guardian' },
           { id:'pf', type:'text', label:'First name', required:true, prefillFrom:'parentFirst' },
           { id:'pl', type:'text', label:'Last name', required:true, prefillFrom:'parentLast' },
@@ -168,7 +180,7 @@
 
       'demo-conference': { access:'private', form:{ id:'demo-conference', title:'HS Parent/Teacher Conference',
         description:'Private demo — verify with any email + any 6-digit code. Fabricated family + teachers.',
-        confirmationMessage:'Thank you — your conference request was received. (Demo.)', locked:false, pages:[{ title:'Main', fields:[
+        confirmationMessage:'Thank you — your conference request was received. (Demo.)', locked:false, reviewMode:true, pages:[{ title:'Main', fields:[
           { id:'secP', type:'sectionHeader', label:'Parent / guardian' },
           { id:'pf', type:'text', label:'First name', required:true, prefillFrom:'parentFirst' },
           { id:'pl', type:'text', label:'Last name', required:true, prefillFrom:'parentLast' },
@@ -187,6 +199,7 @@
     var ORDER = ['demo-open','demo-parent','demo-conference'];
     function qs(k){ return new URLSearchParams(location.search).get(k); }
     window.FORM_ID = qs('form') && FORMS[qs('form')] ? qs('form') : 'demo-open';
+    window.PREVIEW = true;
     try { localStorage.removeItem('hcsFormsToken'); } catch(e){}  // always start fresh so OTP flow shows
 
     var API = {
@@ -358,6 +371,13 @@
     applyPrefill();
     var so = document.getElementById('signOut'); if (so) so.addEventListener('click', signOut);
     if (!form.locked) document.getElementById('submitBtn').addEventListener('click', onSubmit);
+
+    if (form.reviewMode) {
+      var demo = (typeof window !== 'undefined' && window.PREVIEW) ? ' <em>(This is a demo — no email is actually sent.)</em>' : '';
+      FormsUI.modal('Before you begin',
+        'The email address you enter will receive <strong>two emails</strong> after you submit: a <strong>confirmation</strong> (to you as the requester) and a copy of the <strong>notification the form’s owner receives</strong>.' + demo,
+        'Got it');
+    }
   }
 
   function renderField(f) {
