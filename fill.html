@@ -112,6 +112,9 @@
   .filelist { margin-top:6px; }
   .filelist .fitem { display:flex; align-items:center; gap:8px; font-size:.82rem; color:var(--text); }
   .desc-block { font-size:.9rem; color:var(--text); white-space:pre-wrap; line-height:1.5; margin:0; }
+  .progress { height:6px; background:var(--line); border-radius:999px; overflow:hidden; margin-bottom:4px; }
+  .progress-bar { height:100%; background:var(--hcs-red); transition:width .2s ease; }
+  .calc-value { font-weight:800; color:var(--hcs-red); background:#f7f8fa; }
   .footer { text-align:center; color:var(--muted); font-size:.75rem; padding:22px 0 0; }
   @media (max-width:520px){ .card-pad{ padding:16px; } .page{ padding:14px 10px 48px; } }
 </style>
@@ -233,12 +236,15 @@
           { id:'stu', type:'studentPicker', label:'Student', required:true },
           { id:'pe', type:'email', label:'Parent email', required:true, prefillFrom:'parentEmail' },
           { id:'gradeReg', type:'dropdown', label:'Which grade are you registering FOR (next year)?', required:true, options:['9','10','11','12'] },
+          { id:'pb1', type:'pageBreak', label:'Course selection' },
           { id:'h9', type:'sectionHeader', label:'9th Grade Courses', showIf:{field:'gradeReg',op:'equals',value:'9'} },
           { id:'m9', type:'radio', label:'Math', required:true, options:['Algebra I','Geometry','Algebra II'], showIf:{field:'gradeReg',op:'equals',value:'9'} },
           { id:'s9', type:'radio', label:'Science', required:true, options:['Physical Science','Biology'], showIf:{field:'gradeReg',op:'equals',value:'9'} },
           { id:'h12', type:'sectionHeader', label:'12th Grade Courses', showIf:{field:'gradeReg',op:'equals',value:'12'} },
           { id:'m12', type:'radio', label:'Math', required:true, options:['Pre-Calculus','Calculus','Statistics'], showIf:{field:'gradeReg',op:'equals',value:'12'} },
           { id:'s12', type:'radio', label:'Science', required:true, options:['Physics','Anatomy & Physiology'], showIf:{field:'gradeReg',op:'equals',value:'12'} },
+          { id:'cc', type:'calculation', label:'Courses selected', calc:{op:'count',fields:['m9','s9','m12','s12']} },
+          { id:'pb2', type:'pageBreak', label:'Sign-off' },
           { id:'ssig', type:'signature', label:'Student signature', required:true } ]}] } },
       'demo-homeschool': { access:'private', form:{ id:'demo-homeschool', title:'Homeschool Opportunities Sign Up',
         description:'Homeschool families sign up for HCS opportunities. Verify with any email + any 6-digit code.',
@@ -302,6 +308,9 @@
   var otpEmail = '';
   var ATTACH = {};      // fieldId -> [{ name, mimeType, b64 }] for file/signature fields
   var SIG_DRAWN = {};   // fieldId -> true once the signature canvas has strokes
+  var PAGES = [];       // [{ title, fields:[...] }] split at pageBreak markers
+  var CUR = 0;          // current page index
+  var LOCKED = false;
 
   loadForm();
 
@@ -424,24 +433,37 @@
     body += '<div><h1 class="form-title">' + FormsUI.esc(form.title) + '</h1>' +
             (form.description ? '<p class="form-desc">' + FormsUI.esc(form.description) + '</p>' : '') + '</div>';
     if (form.locked) body += '<div class="notice err">This form is not currently accepting responses.</div>';
-    body += '<div id="fields" class="stack"></div>';
+    body += '<div id="fields"></div>';
     body += '<div id="formErr" class="notice err" role="alert" style="display:none"></div>';
-    if (!form.locked) body += '<button id="submitBtn" class="btn block" type="button">Submit</button>';
+    body += '<div id="pageNav"></div>';
     body += '</div>';
     shell(body);
 
+    LOCKED = !!form.locked;
+    var flat = [];
+    (form.pages || []).forEach(function (pg) { (pg.fields || []).forEach(function (f) { flat.push(f); }); });
+    PAGES = [{ title: '', fields: [] }];
+    flat.forEach(function (f) {
+      if (f.type === 'pageBreak') PAGES.push({ title: f.label || '', fields: [] });
+      else PAGES[PAGES.length - 1].fields.push(f);
+    });
     var host = document.getElementById('fields');
-    (form.pages || []).forEach(function (pg) {
-      (pg.fields || []).forEach(function (f) { host.appendChild(renderField(f)); });
+    PAGES.forEach(function (pg, pi) {
+      var pdiv = FormsUI.el('div', { 'class': 'formpage stack', 'data-page': pi });
+      if (PAGES.length > 1 && pg.title) pdiv.appendChild(FormsUI.el('div', { 'class': 'section-head' }, FormsUI.esc(pg.title)));
+      pg.fields.forEach(function (f) { pdiv.appendChild(renderField(f)); });
+      host.appendChild(pdiv);
     });
 
     applyPrefill();
     initSignatures();
-    var fh = document.getElementById('fields');
-    if (fh) { fh.addEventListener('input', applyVisibility); fh.addEventListener('change', applyVisibility); }
+    restoreDraft();
+    recomputeCalc();
     applyVisibility();
+    host.addEventListener('input', onFieldChange);
+    host.addEventListener('change', onFieldChange);
     var so = document.getElementById('signOut'); if (so) so.addEventListener('click', signOut);
-    if (!form.locked) document.getElementById('submitBtn').addEventListener('click', onSubmit);
+    CUR = 0; showPage(0);
 
     if (form.reviewMode) {
       var demo = (typeof window !== 'undefined' && window.PREVIEW) ? ' <em>(This is a demo — no email is actually sent.)</em>' : '';
@@ -449,6 +471,102 @@
         'The email address you enter will receive <strong>two emails</strong> after you submit: a <strong>confirmation</strong> (to you as the requester) and a copy of the <strong>notification the form’s owner receives</strong>.' + demo,
         'Got it');
     }
+  }
+
+  // ---------- pagination ----------
+  function showPage(i) {
+    CUR = Math.max(0, Math.min(i, PAGES.length - 1));
+    document.querySelectorAll('.formpage').forEach(function (p) {
+      p.style.display = (LOCKED || Number(p.getAttribute('data-page')) === CUR) ? '' : 'none';
+    });
+    renderNav();
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
+  }
+  function renderNav() {
+    var nav = document.getElementById('pageNav'); if (!nav) return;
+    if (LOCKED) { nav.innerHTML = ''; document.querySelectorAll('.formpage').forEach(function (p) { p.style.display = ''; }); return; }
+    var multi = PAGES.length > 1;
+    var prog = multi ? '<div class="progress"><div class="progress-bar" style="width:' + Math.round((CUR + 1) / PAGES.length * 100) + '%"></div></div>' +
+      '<p class="help center">Step ' + (CUR + 1) + ' of ' + PAGES.length + (PAGES[CUR].title ? ' — ' + FormsUI.esc(PAGES[CUR].title) : '') + '</p>' : '';
+    var btns = '<div style="display:flex;gap:10px;margin-top:14px">';
+    if (multi && CUR > 0) btns += '<button class="btn ghost" id="prevBtn" type="button">← Back</button>';
+    btns += (CUR < PAGES.length - 1)
+      ? '<button class="btn block" id="nextBtn" type="button">Next →</button>'
+      : '<button class="btn block" id="submitBtn" type="button">Submit</button>';
+    btns += '</div>';
+    nav.innerHTML = prog + btns;
+    var pv = document.getElementById('prevBtn'); if (pv) pv.onclick = function () { showPage(CUR - 1); };
+    var nx = document.getElementById('nextBtn'); if (nx) nx.onclick = onNext;
+    var sb = document.getElementById('submitBtn'); if (sb) sb.onclick = onSubmit;
+  }
+  function onNext() {
+    var r = validatePage(CUR);
+    var formErr = document.getElementById('formErr');
+    if (!r.ok) { formErr.style.display = 'block'; formErr.textContent = 'Please fix the highlighted fields.'; navigateToField(r.firstBad); return; }
+    formErr.style.display = 'none';
+    showPage(CUR + 1);
+  }
+  function validatePage(pi) {
+    var ans = currentAnswers(), ok = true, firstBad = null;
+    PAGES[pi].fields.forEach(function (f) {
+      if (f.type === 'sectionHeader' || f.type === 'description' || f.type === 'calculation') return;
+      if (!evalShowIf(f.showIf, ans)) { setErr(f, ''); return; }
+      var msg = '';
+      if (f.type === 'file') { if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length)) msg = 'Please attach a file.'; }
+      else if (f.type === 'signature') { captureSignature(f); if (f.required && !(ATTACH[f.id] && ATTACH[f.id].length)) msg = 'Please sign in the box.'; }
+      else { var v = readValue(f); if (f.required && fieldEmpty(f, v)) msg = 'This field is required.'; else if (!fieldEmpty(f, v) && f.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) msg = 'Enter a valid email address.'; }
+      setErr(f, msg); if (msg) { ok = false; if (!firstBad) firstBad = f; }
+    });
+    return { ok: ok, firstBad: firstBad };
+  }
+  function pageOfField(fid) { for (var i = 0; i < PAGES.length; i++) if (PAGES[i].fields.some(function (f) { return f.id === fid; })) return i; return CUR; }
+  function navigateToField(f) { if (!f) return; var pi = pageOfField(f.id); if (pi !== CUR) showPage(pi); var w = document.querySelector('[data-fid="' + f.id + '"]'); if (w) w.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  function onFieldChange() { applyVisibility(); recomputeCalc(); saveDraft(); }
+
+  // ---------- calculation fields ----------
+  function recomputeCalc() {
+    var ans = currentAnswers();
+    FIELDS.forEach(function (f) { if (f.type === 'calculation') { var el = document.getElementById('f_' + f.id); if (el) el.textContent = computeCalcClient(f, ans); } });
+  }
+  function computeCalcClient(f, ans) {
+    var calc = f.calc || {}, src = calc.fields || [];
+    if (calc.op === 'count') { var n = 0; src.forEach(function (fid) { var v = ans[fid]; n += Array.isArray(v) ? v.length : (v !== '' && v != null ? 1 : 0); }); return String(n); }
+    var sum = 0; src.forEach(function (fid) { var v = ans[fid]; if (Array.isArray(v)) v.forEach(function (x) { var num = parseFloat(x); if (isFinite(num)) sum += num; }); else { var num = parseFloat(v); if (isFinite(num)) sum += num; } });
+    return String(Math.round(sum * 100) / 100);
+  }
+
+  // ---------- save & resume (localStorage) ----------
+  function draftKey() { return 'hcsFormsDraft:' + FORM_ID; }
+  function saveDraft() {
+    try { var d = {}; FIELDS.forEach(function (f) { if (f.type === 'file' || f.type === 'signature' || f.type === 'calculation') return; d[f.id] = readValue(f); }); localStorage.setItem(draftKey(), JSON.stringify(d)); } catch (e) {}
+  }
+  function clearDraft() { try { localStorage.removeItem(draftKey()); } catch (e) {} }
+  function restoreDraft() {
+    var raw; try { raw = localStorage.getItem(draftKey()); } catch (e) {}
+    if (!raw) return;
+    var d; try { d = JSON.parse(raw); } catch (e) { return; }
+    var any = false;
+    FIELDS.forEach(function (f) {
+      if (!(f.id in d)) return;
+      var v = d[f.id];
+      if (v === '' || (Array.isArray(v) && !v.length)) return;
+      writeValue(f, v); any = true;
+    });
+    if (any) {
+      var host = document.getElementById('fields');
+      var note = FormsUI.el('div', { 'class': 'notice info' }, 'We restored your saved progress. <a href="#" id="startOver">Start over</a>');
+      host.parentNode.insertBefore(note, host);
+      document.getElementById('startOver').onclick = function (e) { e.preventDefault(); clearDraft(); location.reload(); };
+    }
+  }
+  function writeValue(f, v) {
+    var name = 'f_' + f.id;
+    if (isMultiField(f) || f.type === 'radio' || f.type === 'yesno') {
+      var arr = Array.isArray(v) ? v : [v];
+      document.querySelectorAll('input[name="' + name + '"]').forEach(function (inp) {
+        if (arr.indexOf(inp.value) > -1) { inp.checked = true; var box = inp.closest('.choice'); if (box) box.classList.add('selected'); }
+      });
+    } else { var el = document.getElementById(name); if (el && v != null) el.value = v; }
   }
 
   function renderField(f) {
@@ -500,6 +618,7 @@
       case 'number':ctrl = '<input class="control" type="number" id="' + name + '" placeholder="' + FormsUI.esc(f.placeholder) + '">'; break;
       case 'email': ctrl = '<input class="control" type="email" id="' + name + '" placeholder="' + FormsUI.esc(f.placeholder) + '">'; break;
       case 'phone': ctrl = '<input class="control" type="tel" id="' + name + '" placeholder="' + FormsUI.esc(f.placeholder) + '">'; break;
+      case 'calculation': ctrl = '<div class="control calc-value" id="' + name + '" aria-readonly="true">0</div>'; break;
       default:      ctrl = '<input class="control" type="text" id="' + name + '" placeholder="' + FormsUI.esc(f.placeholder) + '">';
     }
     wrap.innerHTML = lbl + ctrl + (f.help ? '<p class="help">' + FormsUI.esc(f.help) + '</p>' : '') + '<p class="error" id="err-' + f.id + '"></p>';
@@ -677,6 +796,7 @@
   // ---------- collect + validate + submit ----------
   function readValue(f) {
     var name = 'f_' + f.id;
+    if (f.type === 'calculation') { var ce = document.getElementById(name); return ce ? ce.textContent.trim() : ''; }
     if (isMultiField(f)) return Array.prototype.slice.call(document.querySelectorAll('input[name="' + name + '"]:checked')).map(function (i) { return i.value; });
     if (f.type === 'radio' || f.type === 'yesno') { var c = document.querySelector('input[name="' + name + '"]:checked'); return c ? c.value : ''; }
     var el = document.getElementById(name); return el ? el.value.trim() : '';
@@ -715,7 +835,7 @@
     var formErr = document.getElementById('formErr');
     if (!ok) {
       formErr.style.display = 'block'; formErr.textContent = 'Please fix the highlighted fields.';
-      var w = document.querySelector('[data-fid="' + firstBad.id + '"]'); if (w) w.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      navigateToField(firstBad);
       return;
     }
     formErr.style.display = 'none';
@@ -734,6 +854,7 @@
       else { formErr.style.display = 'block'; formErr.textContent = (res && res.message) || 'Submission failed. Please try again.'; }
       return;
     }
+    clearDraft();
     shell('<div class="card flush-top card-pad center stack">' +
       '<div style="font-size:2.5rem">✓</div>' +
       '<h1 class="form-title">Submitted</h1>' +

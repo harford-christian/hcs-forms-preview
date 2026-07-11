@@ -112,6 +112,9 @@
   .filelist { margin-top:6px; }
   .filelist .fitem { display:flex; align-items:center; gap:8px; font-size:.82rem; color:var(--text); }
   .desc-block { font-size:.9rem; color:var(--text); white-space:pre-wrap; line-height:1.5; margin:0; }
+  .progress { height:6px; background:var(--line); border-radius:999px; overflow:hidden; margin-bottom:4px; }
+  .progress-bar { height:100%; background:var(--hcs-red); transition:width .2s ease; }
+  .calc-value { font-weight:800; color:var(--hcs-red); background:#f7f8fa; }
   .footer { text-align:center; color:var(--muted); font-size:.75rem; padding:22px 0 0; }
   @media (max-width:520px){ .card-pad{ padding:16px; } .page{ padding:14px 10px 48px; } }
 </style>
@@ -296,7 +299,8 @@
     ['date', 'Date'], ['dropdown', 'Dropdown'], ['radio', 'Multiple choice'],
     ['checkboxes', 'Checkboxes'], ['yesno', 'Yes / No'],
     ['studentPicker', 'Student picker'], ['staffPicker', 'Staff / teacher picker'],
-    ['file', 'File upload'], ['signature', 'Signature']
+    ['file', 'File upload'], ['signature', 'Signature'],
+    ['pageBreak', 'Page break'], ['calculation', 'Calculation']
   ];
   var OPTION_TYPES = { dropdown: 1, radio: 1, checkboxes: 1 };
   var esc = FormsUI.esc;
@@ -521,6 +525,9 @@
       var cif = document.getElementById('cif_' + f.id), cop = document.getElementById('cop_' + f.id), cval = document.getElementById('cval_' + f.id);
       var updCond = function () { if (!cif || !cif.value) { delete f.showIf; } else { f.showIf = { field: cif.value, op: cop.value, value: cval.value }; } };
       if (cif) cif.onchange = updCond; if (cop) cop.onchange = updCond; if (cval) cval.oninput = updCond;
+      var calcop = document.getElementById('calcop_' + f.id), calcsrc = document.getElementById('calcsrc_' + f.id);
+      var updCalc = function () { if (!f.calc) f.calc = { op: 'sum', fields: [] }; if (calcop) f.calc.op = calcop.value; if (calcsrc) f.calc.fields = Array.prototype.slice.call(calcsrc.querySelectorAll('input:checked')).map(function (i) { return i.value; }); };
+      if (calcop) calcop.onchange = updCalc; if (calcsrc) calcsrc.addEventListener('change', updCalc);
       document.getElementById('up_' + f.id).onclick = function () { move(i, -1); };
       document.getElementById('dn_' + f.id).onclick = function () { move(i, 1); };
       document.getElementById('del_' + f.id).onclick = function () { fields().splice(i, 1); renderCanvas(); };
@@ -533,16 +540,17 @@
       return '<div class="fieldcard"><div class="fchead"><span class="ftype">' + esc(typeLabel) + '</span><strong>' + esc(f.label || '') + '</strong>' + (f.required ? '<span class="req">*</span>' : '') + '</div></div>';
     }
     var body = '';
-    if (f.type === 'sectionHeader' || f.type === 'description') {
+    if (f.type === 'sectionHeader' || f.type === 'description' || f.type === 'pageBreak') {
       var lblCtrl = f.type === 'description'
         ? '<textarea class="control" id="lbl_' + f.id + '" placeholder="Text / policy content (line breaks are kept)">' + esc(f.label || '') + '</textarea>'
-        : '<input class="control" id="lbl_' + f.id + '" value="' + esc(f.label || '') + '" placeholder="Section title">';
-      body = lblCtrl +
+        : '<input class="control" id="lbl_' + f.id + '" value="' + esc(f.label || '') + '" placeholder="' + (f.type === 'pageBreak' ? 'Next page title (optional)' : 'Section title') + '">';
+      var cond = f.type === 'pageBreak' ? '' :
         '<details class="adv"><summary>Conditional logic</summary><label class="lbl">Show this section only if…</label>' +
         '<div class="frow">' +
           '<select class="control" id="cif_' + f.id + '">' + condFieldOpts(f) + '</select>' +
           '<select class="control" id="cop_' + f.id + '">' + condOpOpts(f.showIf) + '</select>' +
           '<input class="control" id="cval_' + f.id + '" value="' + esc((f.showIf && f.showIf.value) || '') + '" placeholder="value"></div></details>';
+      body = (f.type === 'pageBreak' ? '<p class="help">⎯ Fields after this become a new page ⎯</p>' : '') + lblCtrl + cond;
     } else {
       body = '<input class="control" id="lbl_' + f.id + '" value="' + esc(f.label || '') + '" placeholder="Question label">' +
         '<div class="frow" style="margin-top:8px">' +
@@ -562,7 +570,13 @@
       if (f.type === 'file') {
         body += '<label class="lbl">Accepted file types (optional)</label><input class="control" id="acc_' + f.id + '" value="' + esc(f.accept || '') + '" placeholder=".pdf,image/*"><p class="help">Blank = any. Max 10 MB per file.</p>';
       }
-      if (['studentPicker', 'staffPicker', 'file', 'signature'].indexOf(f.type) === -1) {
+      if (f.type === 'calculation') {
+        body += '<label class="lbl">Calculate</label><select class="control" id="calcop_' + f.id + '">' +
+          [['sum', 'Sum of number fields'], ['count', 'Count of selected options']].map(function (o) {
+            return '<option value="' + o[0] + '"' + (((f.calc && f.calc.op) || 'sum') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+          '<label class="lbl">Using these fields</label><div id="calcsrc_' + f.id + '">' + sourceFieldChecks(f) + '</div>';
+      }
+      if (['studentPicker', 'staffPicker', 'file', 'signature', 'calculation'].indexOf(f.type) === -1) {
         body += '<details class="adv"><summary>Advanced</summary><label class="lbl">Auto-fill from FACTS</label>' +
           '<select class="control" id="pf_' + f.id + '">' + prefillOpts(f.prefillFrom) + '</select></details>';
       }
@@ -592,6 +606,16 @@
     return [['equals', 'equals'], ['notEquals', 'does not equal'], ['contains', 'contains'], ['notEmpty', 'is not empty'], ['empty', 'is empty']]
       .map(function (o) { return '<option value="' + o[0] + '"' + (sel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('');
   }
+  function sourceFieldChecks(cur) {
+    var sel = (cur.calc && cur.calc.fields) || [];
+    var eligible = fields().filter(function (f) {
+      return f.id !== cur.id && ['number', 'checkboxes', 'radio', 'dropdown', 'studentPicker', 'staffPicker'].indexOf(f.type) > -1;
+    });
+    if (!eligible.length) return '<p class="help">Add number or choice fields first, then pick them here.</p>';
+    return eligible.map(function (f) {
+      return '<label class="choice" style="padding:6px 10px"><input type="checkbox" value="' + f.id + '"' + (sel.indexOf(f.id) > -1 ? ' checked' : '') + '><span>' + esc(f.label || f.id) + '</span></label>';
+    }).join('');
+  }
   function prefillOpts(sel) {
     return [['', '— none —'], ['parentFirst', 'Parent first name'], ['parentLast', 'Parent last name'],
       ['parentEmail', 'Parent email (locked)'], ['studentGrade', 'Student grade'], ['studentName', 'Student name']]
@@ -604,6 +628,7 @@
     var f = { id: uid(), type: type, label: '', required: false };
     if (OPTION_TYPES[type]) f.options = ['Option 1'];
     if (type === 'sectionHeader') f.label = 'Section title';
+    if (type === 'calculation') f.calc = { op: 'sum', fields: [] };
     fields().push(f); renderCanvas();
     setTimeout(function () { var el = document.getElementById('lbl_' + f.id); if (el) el.focus(); }, 30);
   }
@@ -636,6 +661,7 @@
         opt('draft', 'Draft', s.lifecycle) + opt('published', 'Published', s.lifecycle) + opt('closed', 'Closed', s.lifecycle) + '</select>' +
       '<div class="switchrow"><span>Not accepting responses</span><span class="toggle"><input type="checkbox" id="sLock"' + (s.locked ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<div class="switchrow"><span>Review mode — send both emails to the submitter</span><span class="toggle"><input type="checkbox" id="sReview"' + (s.reviewMode ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+      '<div class="switchrow"><span>Limit to one response per person</span><span class="toggle"><input type="checkbox" id="sOnce"' + (s.onePerEmail ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<label class="lbl">Notify on submit (emails, comma-sep)</label><input class="control" id="sNotify" value="' + esc((s.notifyEmails || []).join(', ')) + '">' +
       '<label class="lbl">Confirmation message</label><textarea class="control" id="sConfirm">' + esc(s.confirmationMessage || '') + '</textarea>' +
       '<div class="divider"></div><h4>Approvals</h4>' +
@@ -658,6 +684,7 @@
     document.getElementById('sLife').onchange = function () { s.lifecycle = this.value; };
     document.getElementById('sLock').onchange = function () { s.locked = this.checked; };
     document.getElementById('sReview').onchange = function () { s.reviewMode = this.checked; };
+    document.getElementById('sOnce').onchange = function () { s.onePerEmail = this.checked; };
     if (!s.approval) s.approval = { enabled: false, approvers: [], mode: 'any' };
     document.getElementById('aEn').onchange = function () { s.approval.enabled = this.checked; };
     document.getElementById('aWho').oninput = function () { s.approval.approvers = this.value.split(',').map(function (x) { return x.trim(); }).filter(Boolean); };
@@ -675,7 +702,7 @@
     var s = EDITING.schema.settings;
     var save1 = EDITING.structureLocked ? Promise.resolve({ ok: true }) : call('saveForm', [EDITING.meta.id, EDITING.schema]);
     save1.then(function () {
-      return call('setFormState', [EDITING.meta.id, { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage }]);
+      return call('setFormState', [EDITING.meta.id, { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage }]);
     }).then(function () { btn.disabled = false; btn.textContent = 'Save'; FormsUI.toast('Saved'); })
       .catch(function (e) {
         btn.disabled = false; btn.textContent = 'Save';
