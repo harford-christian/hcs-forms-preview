@@ -397,7 +397,7 @@
         '<div class="meta">' + m.submissions + ' response' + (m.submissions === 1 ? '' : 's') +
           (TAB === 'all' ? ' · ' + esc(m.owner) : '') + '</div>' +
         '<div class="acts">' +
-          btn('Edit', 'edit', m.id) + btn('Responses', 'resp', m.id) +
+          btn('Edit', 'edit', m.id) + btn('Preview', 'preview', m.id, 'ghost') + btn('Responses', 'resp', m.id) +
           btn('Share', 'share', m.id, 'ghost') + btn('Duplicate', 'dup', m.id, 'ghost') +
           btn('Save as template', 'tpl', m.id, 'ghost') +
         '</div></div>';
@@ -414,8 +414,7 @@
       return '<div class="fcard"><h3>' + esc(m.title || '(untitled)') + '</h3>' +
         '<div class="pills">' + scope + lock + (m.category ? '<span class="pill draft">' + esc(m.category) + '</span>' : '') + '</div>' +
         '<div class="meta">by ' + esc(m.owner) + '</div>' +
-        '<div class="acts">' + btn('Use this template', 'use', m.id) +
-          (ME.isAdmin || m.owner.toLowerCase() === ME.email.toLowerCase() ? btn('Preview', 'edit', m.id, 'ghost') : '') +
+        '<div class="acts">' + btn('Use this template', 'use', m.id) + btn('Preview', 'preview', m.id, 'ghost') +
         '</div></div>';
     }).join('') + '</div>';
     wireCardButtons();
@@ -435,6 +434,7 @@
       b.onclick = function () {
         var id = b.getAttribute('data-id'), act = b.getAttribute('data-act');
         if (act === 'edit') return openEditor(id);
+        if (act === 'preview') return doPreview(id);
         if (act === 'resp') return openResponses(id);
         if (act === 'share') return doShare(id);
         if (act === 'dup') return doDuplicate(id);
@@ -451,6 +451,12 @@
   }
   function doUse(id) { call('createFromTemplate', [id]).then(function (r) { FormsUI.toast('Copied to your forms'); openEditor(r.formId); }).catch(alertErr); }
   function doDuplicate(id) { call('duplicateForm', [id, {}]).then(function (r) { openEditor(r.formId); }).catch(alertErr); }
+  function doPreview(id) {
+    if (typeof window !== 'undefined' && window.PREVIEW) { window.open('fill.html', '_blank'); return; } // public demo
+    var base = (ME && ME.execUrl) || '';
+    if (!base) return alert('Preview URL not available yet.');
+    window.open(base + '?form=' + encodeURIComponent(id) + '&preview=1', '_blank');
+  }
   function doShare(id) {
     call('getShareUrl', [id]).then(function (r) {
       if (!r.url) return alert('Deploy the public URL first (Config tab). Access: ' + r.access);
@@ -671,6 +677,7 @@
       '<div class="divider"></div>' +
       (EDITING.structureLocked ? '' : '<button class="btn gold block" id="btnParent" style="margin-bottom:8px">➕ This form is for Parents</button>') +
       '<button class="btn block" id="btnSave">Save</button>' +
+      '<button class="btn ghost block" id="btnPreview" style="margin-top:8px">Preview as submitter</button>' +
       '<button class="btn ghost block" id="btnShare" style="margin-top:8px">Get share link</button>' +
       '<button class="btn ghost block" id="btnResp" style="margin-top:8px">View responses</button>' +
       '</div>';
@@ -693,6 +700,13 @@
     document.getElementById('sConfirm').oninput = function () { s.confirmationMessage = this.value; };
     var bp = document.getElementById('btnParent'); if (bp) bp.onclick = addParentBlock;
     document.getElementById('btnSave').onclick = saveAll;
+    document.getElementById('btnPreview').onclick = function () {
+      // save current edits first so the preview reflects them, then open
+      var st = { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage };
+      var p = EDITING.structureLocked ? Promise.resolve({ ok: true }) : call('saveForm', [EDITING.meta.id, EDITING.schema]);
+      p.then(function () { return call('setFormState', [EDITING.meta.id, st]); })
+        .then(function () { doPreview(EDITING.meta.id); }).catch(alertErr);
+    };
     document.getElementById('btnShare').onclick = function () { doShare(EDITING.meta.id); };
     document.getElementById('btnResp').onclick = function () { openResponses(EDITING.meta.id); };
   }

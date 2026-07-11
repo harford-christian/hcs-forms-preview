@@ -301,6 +301,7 @@
   var app = document.getElementById('app');
   var TOKEN_KEY = 'hcsFormsToken';
   var TOKEN = null; try { TOKEN = localStorage.getItem(TOKEN_KEY); } catch (e) {}
+  var IS_PREVIEW = (typeof PREVIEW_MODE !== 'undefined' && PREVIEW_MODE === '1');
   var FIELDS = [];      // flat INPUT-field metadata (values + validation)
   var VISALL = [];      // ALL fields incl. section headers/descriptions (for show/hide)
   var PREFILL = null;   // { parent:{first,last,email}, students:[...] } for verified parents
@@ -316,10 +317,10 @@
 
   function loadForm() {
     shell('<div class="card flush-top card-pad center"><span class="spinner" style="border-color:rgba(139,30,30,.25);border-top-color:var(--hcs-red)"></span><p class="help" style="margin-top:10px">Loading form…</p></div>');
-    google.script.run
+    var runner = google.script.run
       .withSuccessHandler(onForm)
-      .withFailureHandler(function (e) { message('Something went wrong', String(e && e.message || e)); })
-      .getPublicForm(FORM_ID, TOKEN);
+      .withFailureHandler(function (e) { message('Something went wrong', String(e && e.message || e)); });
+    if (IS_PREVIEW) runner.getFormPreview(FORM_ID); else runner.getPublicForm(FORM_ID, TOKEN);
   }
 
   function onForm(res) {
@@ -425,6 +426,7 @@
   function renderForm(form) {
     FIELDS = []; VISALL = [];
     var body = '<div class="card flush-top card-pad stack">';
+    if (IS_PREVIEW) body += '<div class="notice info">👁 <strong>Preview</strong> — this is exactly what submitters see (with sample data). Nothing is saved.</div>';
     if (VIA === 'otp' && PREFILL && PREFILL.parent) {
       body += '<div class="notice info" style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
         '<span>Signed in as <strong>' + FormsUI.esc(PREFILL.parent.email) + '</strong></span>' +
@@ -839,6 +841,7 @@
       return;
     }
     formErr.style.display = 'none';
+    if (IS_PREVIEW) { onSubmitDone({ ok: true, message: 'This is a preview — your response was NOT saved.', submissionId: 'PREVIEW' }); return; }
     var btn = document.getElementById('submitBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting…';
     google.script.run
       .withSuccessHandler(onSubmitDone)
