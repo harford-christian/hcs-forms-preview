@@ -528,6 +528,7 @@
       var multEl = document.getElementById('mult_' + f.id); if (multEl) multEl.onchange = function () { f.multiple = this.checked; };
       var lvlEl = document.getElementById('lvl_' + f.id); if (lvlEl) lvlEl.onchange = function () { f.staffLevel = this.value; };
       var accEl = document.getElementById('acc_' + f.id); if (accEl) accEl.oninput = function () { f.accept = this.value; };
+      var capEl = document.getElementById('cap_' + f.id); if (capEl) capEl.oninput = function () { f.capacity = parseCap(this.value); };
       var cif = document.getElementById('cif_' + f.id), cop = document.getElementById('cop_' + f.id), cval = document.getElementById('cval_' + f.id);
       var updCond = function () { if (!cif || !cif.value) { delete f.showIf; } else { f.showIf = { field: cif.value, op: cop.value, value: cval.value }; } };
       if (cif) cif.onchange = updCond; if (cop) cop.onchange = updCond; if (cval) cval.oninput = updCond;
@@ -566,6 +567,12 @@
       if (OPTION_TYPES[f.type]) body += '<label class="lbl">Options (one per line)</label><textarea class="control" id="opt_' + f.id + '" placeholder="Option 1&#10;Option 2">' + esc((f.options || []).join('\n')) + '</textarea>';
       if (f.type === 'studentPicker' || f.type === 'staffPicker' || f.type === 'file') {
         body += '<label class="switchrow" style="margin-top:8px"><span>Allow ' + (f.type === 'file' ? 'multiple files' : 'choosing multiple') + '</span><span class="toggle"><input type="checkbox" id="mult_' + f.id + '"' + (f.multiple ? ' checked' : '') + '><span class="sl"></span></span></label>';
+      }
+      if (OPTION_TYPES[f.type]) {
+        body += '<details class="adv"><summary>Limit sign-ups per option (capacity)</summary>' +
+          '<label class="lbl">One per line: <code>Option = number</code></label>' +
+          '<textarea class="control" id="cap_' + f.id + '" placeholder="Tue 3:00 = 5">' + esc(capToText(f.capacity)) + '</textarea>' +
+          '<p class="help">Blank = unlimited. A full option is hidden from submitters and rejected on submit.</p></details>';
       }
       if (f.type === 'staffPicker') {
         body += '<label class="lbl">Which staff to list</label><select class="control" id="lvl_' + f.id + '">' +
@@ -611,6 +618,16 @@
     var sel = (showIf && showIf.op) || 'equals';
     return [['equals', 'equals'], ['notEquals', 'does not equal'], ['contains', 'contains'], ['notEmpty', 'is not empty'], ['empty', 'is empty']]
       .map(function (o) { return '<option value="' + o[0] + '"' + (sel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('');
+  }
+  function capToText(cap) { cap = cap || {}; return Object.keys(cap).map(function (k) { return k + ' = ' + cap[k]; }).join('\n'); }
+  function parseCap(text) {
+    var m = {};
+    String(text).split('\n').forEach(function (line) {
+      var i = line.lastIndexOf('='); if (i < 0) return;
+      var k = line.slice(0, i).trim(); var n = parseInt(line.slice(i + 1).trim(), 10);
+      if (k && isFinite(n) && n >= 0) m[k] = n;
+    });
+    return m;
   }
   function sourceFieldChecks(cur) {
     var sel = (cur.calc && cur.calc.fields) || [];
@@ -670,6 +687,10 @@
       '<div class="switchrow"><span>Limit to one response per person</span><span class="toggle"><input type="checkbox" id="sOnce"' + (s.onePerEmail ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<label class="lbl">Notify on submit (emails, comma-sep)</label><input class="control" id="sNotify" value="' + esc((s.notifyEmails || []).join(', ')) + '">' +
       '<label class="lbl">Confirmation message</label><textarea class="control" id="sConfirm">' + esc(s.confirmationMessage || '') + '</textarea>' +
+      '<div class="divider"></div><h4>Scheduling &amp; limits</h4>' +
+      '<label class="lbl">Opens (optional)</label><input class="control" id="sOpen" type="datetime-local" value="' + esc(s.openDate || '') + '">' +
+      '<label class="lbl">Closes (optional)</label><input class="control" id="sClose" type="datetime-local" value="' + esc(s.closeDate || '') + '">' +
+      '<label class="lbl">Max total responses (0 = unlimited)</label><input class="control" id="sMax" type="number" min="0" value="' + esc(s.maxResponses || 0) + '">' +
       '<div class="divider"></div><h4>Approvals</h4>' +
       '<div class="switchrow"><span>Require approval before it’s final</span><span class="toggle"><input type="checkbox" id="aEn"' + (ap.enabled ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<label class="lbl">Approvers (emails or group names, comma-sep)</label><input class="control" id="aWho" value="' + esc((ap.approvers || []).join(', ')) + '">' +
@@ -692,6 +713,9 @@
     document.getElementById('sLock').onchange = function () { s.locked = this.checked; };
     document.getElementById('sReview').onchange = function () { s.reviewMode = this.checked; };
     document.getElementById('sOnce').onchange = function () { s.onePerEmail = this.checked; };
+    document.getElementById('sOpen').onchange = function () { s.openDate = this.value; };
+    document.getElementById('sClose').onchange = function () { s.closeDate = this.value; };
+    document.getElementById('sMax').oninput = function () { s.maxResponses = Number(this.value) || 0; };
     if (!s.approval) s.approval = { enabled: false, approvers: [], mode: 'any' };
     document.getElementById('aEn').onchange = function () { s.approval.enabled = this.checked; };
     document.getElementById('aWho').oninput = function () { s.approval.approvers = this.value.split(',').map(function (x) { return x.trim(); }).filter(Boolean); };
@@ -702,7 +726,7 @@
     document.getElementById('btnSave').onclick = saveAll;
     document.getElementById('btnPreview').onclick = function () {
       // save current edits first so the preview reflects them, then open
-      var st = { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage };
+      var st = { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, openDate: s.openDate || '', closeDate: s.closeDate || '', maxResponses: Number(s.maxResponses) || 0, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage };
       var p = EDITING.structureLocked ? Promise.resolve({ ok: true }) : call('saveForm', [EDITING.meta.id, EDITING.schema]);
       p.then(function () { return call('setFormState', [EDITING.meta.id, st]); })
         .then(function () { doPreview(EDITING.meta.id); }).catch(alertErr);
@@ -716,7 +740,7 @@
     var s = EDITING.schema.settings;
     var save1 = EDITING.structureLocked ? Promise.resolve({ ok: true }) : call('saveForm', [EDITING.meta.id, EDITING.schema]);
     save1.then(function () {
-      return call('setFormState', [EDITING.meta.id, { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage }]);
+      return call('setFormState', [EDITING.meta.id, { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, openDate: s.openDate || '', closeDate: s.closeDate || '', maxResponses: Number(s.maxResponses) || 0, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage }]);
     }).then(function () { btn.disabled = false; btn.textContent = 'Save'; FormsUI.toast('Saved'); })
       .catch(function (e) {
         btn.disabled = false; btn.textContent = 'Save';

@@ -207,7 +207,7 @@
           { id:'grade', type:'text', label:'Grade', prefillFrom:'studentGrade' },
           { id:'secC', type:'sectionHeader', label:'Conference request' },
           { id:'teachers', type:'staffPicker', label:'Which teacher(s) would you like to meet with?', required:true, multiple:true, options:STAFF },
-          { id:'t1', type:'dropdown', label:'First choice — meeting time', required:true, options:slots },
+          { id:'t1', type:'dropdown', label:'First choice — meeting time', required:true, options:slots, capacityLeft:{ 'Tue — 3:00–3:20 PM':0, 'Tue — 3:20–3:40 PM':2, 'Tue — 3:40–4:00 PM':5 } },
           { id:'t2', type:'dropdown', label:'Second choice — meeting time', options:slots },
           { id:'t3', type:'dropdown', label:'Third choice — meeting time', options:slots },
           { id:'info', type:'textarea', label:'Anything else we should know?' } ]}] } },
@@ -354,9 +354,18 @@
   function reasonText(res) {
     var r = res && res.reason;
     if (r === 'not-found') return ['Form not found', 'This form does not exist or the link is incorrect.'];
-    if (r === 'not-published') return ['Form unavailable', 'This form is not currently published.'];
+    if (r === 'not-open') return ['Not open yet', 'This form opens ' + fmtWhen(res.openDate) + '. Please check back then.'];
+    if (r === 'closed') return ['This form is closed', 'The deadline' + (res.closeDate ? ' (' + fmtWhen(res.closeDate) + ')' : '') + ' has passed.'];
+    if (r === 'full') return ['This form is full', 'It has reached its response limit and can no longer accept submissions.'];
+    if (r === 'locked' || r === 'not-published') return ['Form unavailable', 'This form is not currently accepting responses.'];
     if (r === 'auth-required') return ['Sign-in required', 'This form is only available to staff.'];
     return ['Unavailable', 'This form can’t be shown right now.'];
+  }
+  function fmtWhen(s) {
+    if (!s) return 'soon';
+    var d = new Date(String(s).indexOf('T') === -1 ? s + 'T00:00:00' : s);
+    if (isNaN(d.getTime())) return String(s);
+    try { return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return d.toLocaleString(); }
   }
 
   // ---------- OTP login (Private forms) ----------
@@ -608,17 +617,19 @@
       }
       case 'dropdown':
         ctrl = '<select class="control" id="' + name + '"><option value="">— Choose —</option>' +
-          (f.options || []).map(function (o) { return '<option value="' + FormsUI.esc(o) + '">' + FormsUI.esc(o) + '</option>'; }).join('') + '</select>'; break;
+          (f.options || []).map(function (o) { var c = capNote(f, o); return '<option value="' + FormsUI.esc(o) + '"' + (c.full ? ' disabled' : '') + '>' + FormsUI.esc(o) + c.suffix + '</option>'; }).join('') + '</select>'; break;
       case 'radio':
       case 'yesno': {
         var opts = f.type === 'yesno' ? ['Yes', 'No'] : (f.options || []);
         ctrl = '<div class="choices">' + opts.map(function (o) {
-          return '<label class="choice"><input type="radio" name="' + name + '" value="' + FormsUI.esc(o) + '"><span>' + FormsUI.esc(o) + '</span></label>';
+          var c = capNote(f, o);
+          return '<label class="choice"' + (c.full ? ' style="opacity:.55"' : '') + '><input type="radio" name="' + name + '" value="' + FormsUI.esc(o) + '"' + (c.full ? ' disabled' : '') + '><span>' + FormsUI.esc(o) + c.suffix + '</span></label>';
         }).join('') + '</div>'; break;
       }
       case 'checkboxes':
         ctrl = '<div class="choices">' + (f.options || []).map(function (o) {
-          return '<label class="choice"><input type="checkbox" name="' + name + '" value="' + FormsUI.esc(o) + '"><span>' + FormsUI.esc(o) + '</span></label>';
+          var c = capNote(f, o);
+          return '<label class="choice"' + (c.full ? ' style="opacity:.55"' : '') + '><input type="checkbox" name="' + name + '" value="' + FormsUI.esc(o) + '"' + (c.full ? ' disabled' : '') + '><span>' + FormsUI.esc(o) + c.suffix + '</span></label>';
         }).join('') + '</div>'; break;
       case 'file': {
         var acc = f.accept ? ' accept="' + FormsUI.esc(f.accept) + '"' : '';
@@ -719,6 +730,12 @@
       opts.map(function (o) { return '<option value="' + FormsUI.esc(o.v) + '">' + FormsUI.esc(o.label) + '</option>'; }).join('') + '</select>';
   }
   function isMultiField(f) { return f.type === 'checkboxes' || ((f.type === 'studentPicker' || f.type === 'staffPicker') && f.multiple); }
+  // capacity remaining for an option (from server); full options are disabled + labeled
+  function capNote(f, o) {
+    if (!f.capacityLeft || f.capacityLeft[o] == null) return { full: false, suffix: '' };
+    var left = f.capacityLeft[o];
+    return { full: left <= 0, suffix: left <= 0 ? ' (full)' : ' (' + left + ' left)' };
+  }
 
   // ---------- conditional logic (mirror of server Logic.js) ----------
   function evalShowIf(rule, answers) {
