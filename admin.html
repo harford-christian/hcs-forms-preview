@@ -299,6 +299,7 @@
     window.PREVIEW = true; window.STAFF_EMAIL = 'you@harfordchristian.org';
     var idc = 100; function nid(p){ return (p||'f-new-')+(idc++); }
     var ME = { email:'you@harfordchristian.org', isAdmin:true, name:'Demo Admin' };
+    var ADMINS = [{email:'you@harfordchristian.org',name:'Demo Admin'},{email:'kminton@harfordchristian.org',name:'Kate Minton'}];
     function meta(o){ return Object.assign({ owner:ME.email, lifecycle:'published', access:'open', locked:false,
       isTemplate:false, templateScope:'', layoutLock:'', category:'', responseSheetId:'demo', updatedAt:'2026-02-01', submissions:0 }, o); }
     var STORE = {};
@@ -352,6 +353,9 @@
       setFormState: function(id, st){ var m=STORE[id].meta; if(st.lifecycle)m.lifecycle=st.lifecycle; if(st.access)m.access=st.access; if(typeof st.locked==='boolean')m.locked=st.locked; return {ok:true,meta:JSON.parse(JSON.stringify(m))}; },
       saveAsTemplate: function(id, opts){ var n=nid('t-new-'); var sc=JSON.parse(JSON.stringify(STORE[id].schema)); sc.id=n; add(n,{title:sc.title,isTemplate:true,templateScope:opts.scope,layoutLock:opts.layoutLock,lifecycle:'template'},sc); return {ok:true,templateId:n,scope:opts.scope,layoutLock:opts.layoutLock}; },
       deleteForm: function(id){ delete STORE[id]; return {ok:true}; },
+      listAdmins: function(){ return ADMINS.slice(); },
+      addAdmin: function(email, name){ if(!ADMINS.some(function(a){return a.email.toLowerCase()===String(email).toLowerCase();})) ADMINS.push({email:String(email).toLowerCase(),name:name||''}); return {ok:true, admins:ADMINS.slice()}; },
+      removeAdmin: function(email){ ADMINS = ADMINS.filter(function(a){return a.email.toLowerCase()!==String(email).toLowerCase();}); return {ok:true, admins:ADMINS.slice()}; },
       getShareUrl: function(id){ return {ok:true, url: location.href.replace(/admin\.html.*$/, 'fill.html?form=demo-open'), access: STORE[id].meta.access}; },
       getResponses: function(id){ var m=STORE[id].meta; return {ok:true, headers:['SubmissionID','Timestamp','Email','First name','Last name','Status'], rows:rows(Math.min(6,m.submissions)), count:m.submissions, sheetUrl:''}; },
       getApprovalQueue: function(){ return {ok:true, items:[
@@ -429,10 +433,12 @@
       '<div style="margin-left:auto;display:flex;gap:8px">' +
         '<button class="btn" id="newBlank">+ New form</button>' +
         '<button class="btn ghost" id="newTpl">From template</button>' +
+        (ME.isAdmin ? '<button class="btn ghost" id="mngAdmins">Manage admins</button>' : '') +
       '</div></div>';
     chrome(header + tabs + '<div id="list"><p class="help">Loading…</p></div>');
     document.getElementById('newBlank').onclick = newBlank;
     document.getElementById('newTpl').onclick = function () { TAB = 'library'; renderDashboard(); };
+    var ma = document.getElementById('mngAdmins'); if (ma) ma.onclick = manageAdmins;
     ['mine', 'library', 'all', 'approvals'].forEach(function (t) { var b = document.getElementById('tab_' + t); if (b) b.onclick = function () { TAB = t; renderDashboard(); }; });
     loadList();
   }
@@ -528,11 +534,13 @@
     host.innerHTML = '<div class="grid">' + items.map(function (m) {
       var lock = m.layoutLock === 'useAsIs' ? '<span class="pill locked">use as-is</span>' : '<span class="pill draft">starter</span>';
       var scope = m.templateScope === 'shared' ? '<span class="pill staff">shared</span>' : '<span class="pill private">personal</span>';
+      var canEdit = ME.isAdmin || m.owner.toLowerCase() === ME.email.toLowerCase();
       return '<div class="fcard"><h3>' + esc(m.title || '(untitled)') + '</h3>' +
         '<div class="pills">' + scope + lock + (m.category ? '<span class="pill draft">' + esc(m.category) + '</span>' : '') + '</div>' +
         '<div class="meta">by ' + esc(m.owner) + '</div>' +
         '<div class="acts">' + btn('Use this template', 'use', m.id) + btn('Preview', 'preview', m.id, 'ghost') +
-          (ME.isAdmin || m.owner.toLowerCase() === ME.email.toLowerCase()
+          (canEdit ? btn('Edit', 'edit', m.id, 'ghost') : '') +
+          (canEdit
             ? '<button class="btn ghost danger sm" data-act="del" data-id="' + m.id + '" title="Delete template" style="display:inline-flex;align-items:center;gap:5px">' + FormsUI.icon('trash', { size: 15 }) + ' Delete</button>' : '') +
         '</div></div>';
     }).join('') + '</div>';
@@ -639,18 +647,65 @@
     }).catch(alertErr);
   }
   function doSaveAsTemplate(id) {
-    var scopeSel = ME.isAdmin
-      ? '<label class="lbl">Library</label><select class="control" id="_tscope"><option value="shared">Shared — all staff can use it</option><option value="personal">Personal — only me</option></select>'
-      : '<input type="hidden" id="_tscope" value="personal"><p class="help">Saved to your personal library.</p>';
-    var body = scopeSel + '<label class="lbl">When someone uses it</label><select class="control" id="_tlock">' +
-      '<option value="starter">Starter — they copy &amp; edit freely</option>' +
-      '<option value="useAsIs">Use as-is — layout locked</option></select>';
+    var body = '<label class="lbl">Library</label><select class="control" id="_tscope">' +
+        '<option value="shared">Shared — all staff can browse &amp; use it</option>' +
+        '<option value="personal">Personal — only me</option></select>' +
+      '<label class="lbl">When someone uses it</label><select class="control" id="_tlock">' +
+        '<option value="starter">Starter — they copy &amp; edit freely</option>' +
+        '<option value="useAsIs">Use as-is — layout locked to the HCS design</option></select>' +
+      '<p class="help">“Use as-is” locks the fields/layout so it’s used unchanged every time (admins can still edit it).</p>';
     modalWith('Save as template', body, 'Save', function (ov) {
       var scope = (ov.querySelector('#_tscope') || {}).value || 'personal';
       var lock = (ov.querySelector('#_tlock') || {}).value || 'starter';
       call('saveAsTemplate', [id, { scope: scope, layoutLock: lock }])
         .then(function () { FormsUI.toast('Saved to ' + scope + ' library'); }).catch(alertErr);
     });
+  }
+
+  // ---------- admin roster (admin-only) ----------
+  function manageAdmins() {
+    call('listAdmins').then(function (admins) {
+      var ov = document.createElement('div'); ov.className = 'modal-overlay';
+      function render(list) {
+        var rows = list.map(function (a) {
+          return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)">' +
+            '<div style="flex:1;min-width:0"><strong style="word-break:break-all">' + esc(a.email) + '</strong>' + (a.name ? '<div class="help">' + esc(a.name) + '</div>' : '') + '</div>' +
+            '<button class="btn ghost danger sm" data-rm="' + esc(a.email) + '" style="display:inline-flex;align-items:center;gap:5px">' + FormsUI.icon('trash', { size: 14 }) + ' Remove</button></div>';
+        }).join('');
+        return '<p class="help">Admins can view and edit <strong>every</strong> form and template (including ones others created), and manage this list.</p>' +
+          '<div id="_admlist">' + rows + '</div>' +
+          '<div class="divider"></div><label class="lbl">Add an admin</label>' +
+          '<div class="frow"><input class="control" id="_admEmail" type="email" placeholder="name@harfordchristian.org" style="flex:2;min-width:200px"><input class="control" id="_admName" placeholder="Name (optional)" style="flex:1"></div>' +
+          '<button class="btn block" id="_admAdd" style="margin-top:8px">Add admin</button>';
+      }
+      ov.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-label="Manage admins"><h3>Manage admins</h3>' +
+        '<div class="mbody" id="_admBody">' + render(admins) + '</div>' +
+        '<div style="display:flex;gap:10px"><button class="btn ghost block" data-x="0" type="button">Close</button></div></div>';
+      function close() { ov.remove(); }
+      function refresh(list) { ov.querySelector('#_admBody').innerHTML = render(list); wire(); }
+      function wire() {
+        ov.querySelectorAll('[data-rm]').forEach(function (b) {
+          b.onclick = function () {
+            var em = b.getAttribute('data-rm');
+            FormsUI.confirm('Remove admin?', esc(em) + ' will lose admin access.', 'Remove').then(function (ok) {
+              if (!ok) return;
+              call('removeAdmin', [em]).then(function (res) { refresh(res.admins); FormsUI.toast('Admin removed'); }).catch(alertErr);
+            });
+          };
+        });
+        var add = ov.querySelector('#_admAdd');
+        if (add) add.onclick = function () {
+          var em = (ov.querySelector('#_admEmail').value || '').trim(), nm = (ov.querySelector('#_admName').value || '').trim();
+          if (!em) return;
+          add.disabled = true; add.innerHTML = '<span class="spinner"></span> Adding…';
+          call('addAdmin', [em, nm]).then(function (res) { refresh(res.admins); FormsUI.toast('Admin added'); })
+            .catch(function (e) { add.disabled = false; add.textContent = 'Add admin'; alertErr(e); });
+        };
+      }
+      ov.querySelector('[data-x="0"]').onclick = close;
+      ov.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+      document.body.appendChild(ov); wire();
+    }).catch(alertErr);
   }
 
   // ---------- editor ----------
