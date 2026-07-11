@@ -309,6 +309,7 @@
   var otpEmail = '';
   var ATTACH = {};      // fieldId -> [{ name, mimeType, b64 }] for file/signature fields
   var SIG_DRAWN = {};   // fieldId -> true once the signature canvas has strokes
+  var PENDING_READS = 0; // in-flight FileReader count; block submit/next until 0
   var PAGES = [];       // [{ title, fields:[...] }] split at pageBreak markers
   var CUR = 0;          // current page index
   var LOCKED = false;
@@ -502,11 +503,19 @@
     var sb = document.getElementById('submitBtn'); if (sb) sb.onclick = onSubmit;
   }
   function onNext() {
+    if (uploadsPending('nextBtn')) return;
     var r = validatePage(CUR);
     var formErr = document.getElementById('formErr');
     if (!r.ok) { formErr.style.display = 'block'; formErr.textContent = 'Please fix the highlighted fields.'; navigateToField(r.firstBad); return; }
     formErr.style.display = 'none';
     showPage(CUR + 1);
+  }
+  // if files are still being read, wait and retry so an attachment is never dropped
+  function uploadsPending(btnId) {
+    if (PENDING_READS <= 0) return false;
+    var fe = document.getElementById('formErr'); if (fe) { fe.style.display = 'block'; fe.textContent = 'Your file is still attaching — one moment…'; }
+    setTimeout(function () { var b = document.getElementById(btnId); if (b) b.click(); }, 350);
+    return true;
   }
   function validatePage(pi) {
     var ans = currentAnswers(), ok = true, firstBad = null;
@@ -528,6 +537,8 @@
   // ---------- calculation fields ----------
   function recomputeCalc() {
     var ans = currentAnswers();
+    // mirror the server: hidden fields don't count
+    FIELDS.forEach(function (f) { if (!evalShowIf(f.showIf, ans)) ans[f.id] = isMultiField(f) ? [] : ''; });
     FIELDS.forEach(function (f) { if (f.type === 'calculation') { var el = document.getElementById('f_' + f.id); if (el) el.textContent = computeCalcClient(f, ans); } });
   }
   function computeCalcClient(f, ans) {
@@ -662,7 +673,9 @@
         return;
       }
       var reader = new FileReader();
-      reader.onload = function () { ATTACH[f.id].push({ name: file.name, mimeType: file.type || 'application/octet-stream', b64: String(reader.result).split(',')[1] }); };
+      PENDING_READS++;
+      reader.onload = function () { ATTACH[f.id].push({ name: file.name, mimeType: file.type || 'application/octet-stream', b64: String(reader.result).split(',')[1] }); PENDING_READS = Math.max(0, PENDING_READS - 1); };
+      reader.onerror = function () { PENDING_READS = Math.max(0, PENDING_READS - 1); };
       reader.readAsDataURL(file);
       list.innerHTML += '<div class="fitem">📎 ' + FormsUI.esc(file.name) + ' (' + Math.round(file.size / 1024) + ' KB)</div>';
     });
@@ -789,11 +802,20 @@
   function refreshStudentDerived() {
     var s = selectedStudent();
     FIELDS.forEach(function (f) {
-      if (f.prefillFrom === 'studentGrade') { setVal(f.id, s ? s.grade : ''); lockField(f.id); }
-      if (f.prefillFrom === 'studentName') { setVal(f.id, s ? s.displayName : ''); lockField(f.id); }
+      if (f.prefillFrom !== 'studentGrade' && f.prefillFrom !== 'studentName') return;
+      var v = s ? (f.prefillFrom === 'studentGrade' ? s.grade : s.displayName) : '';
+      setVal(f.id, v);
+      // Only lock when we actually derived a value; otherwise leave it editable so a parent
+      // with 0 or >1 students selected can still complete a required field (no dead-end).
+      if (v) lockField(f.id, true); else lockField(f.id, false);
     });
   }
-  function lockField(id) { var el = document.getElementById('f_' + id); if (el) { el.readOnly = true; el.setAttribute('readonly', 'readonly'); } }
+  function lockField(id, on) {
+    var el = document.getElementById('f_' + id);
+    if (!el) return;
+    el.readOnly = !!on;
+    if (on) el.setAttribute('readonly', 'readonly'); else el.removeAttribute('readonly');
+  }
 
   // ---------- collect + validate + submit ----------
   function readValue(f) {
@@ -814,6 +836,7 @@
   }
 
   function onSubmit() {
+    if (uploadsPending('submitBtn')) return;
     var answers = {}, firstBad = null, ok = true;
     var ans0 = currentAnswers(), vis = {};
     FIELDS.forEach(function (f) { vis[f.id] = evalShowIf(f.showIf, ans0); });
