@@ -117,6 +117,11 @@
   .calc-value { font-weight:800; color:var(--hcs-red); background:#f7f8fa; }
   .footer { text-align:center; color:var(--muted); font-size:.75rem; padding:22px 0 0; }
   @media (max-width:520px){ .card-pad{ padding:16px; } .page{ padding:14px 10px 48px; } }
+  /* inline SVG icons (FormsUI.icon) — inherit color/size from context */
+  .hcsi { display:inline-block; vertical-align:middle; flex:none; }
+  .hcsi-lg { width:44px; height:44px; }
+  .infoicon { color:var(--muted); cursor:help; }
+  .infoicon:hover { color:var(--hcs-red); }
 </style>
 <style>
   #pvbar { position:sticky; top:0; z-index:80; display:flex; align-items:center; gap:14px; flex-wrap:wrap;

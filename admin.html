@@ -117,6 +117,11 @@
   .calc-value { font-weight:800; color:var(--hcs-red); background:#f7f8fa; }
   .footer { text-align:center; color:var(--muted); font-size:.75rem; padding:22px 0 0; }
   @media (max-width:520px){ .card-pad{ padding:16px; } .page{ padding:14px 10px 48px; } }
+  /* inline SVG icons (FormsUI.icon) — inherit color/size from context */
+  .hcsi { display:inline-block; vertical-align:middle; flex:none; }
+  .hcsi-lg { width:44px; height:44px; }
+  .infoicon { color:var(--muted); cursor:help; }
+  .infoicon:hover { color:var(--hcs-red); }
 </style>
 <style>
   #pvbar { position:sticky; top:0; z-index:80; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
@@ -167,7 +172,11 @@
   .toolbar input { flex:1; min-width:180px; }
   .fieldcard .ftype { font-size:.66rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:800; background:#eef1f5; padding:2px 7px; border-radius:6px; }
   .fieldcard .fcacts { margin-left:auto; display:flex; gap:4px; }
-  .iconbtn { border:1px solid var(--line-strong); background:var(--card); border-radius:7px; width:30px; height:30px; cursor:pointer; font-size:.9rem; line-height:1; }
+  .fieldcard .fclabel { font-weight:600; font-size:.9rem; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:38%; }
+  .fieldcard.collapsed .fcbody { display:none; }
+  .col-chevron { transition:transform .15s ease; }
+  .fieldcard.collapsed .col-chevron { transform:rotate(-90deg); }
+  .iconbtn { display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--line-strong); background:var(--card); border-radius:7px; width:30px; height:30px; cursor:pointer; font-size:.9rem; line-height:1; color:var(--muted); }
   .iconbtn:hover { border-color:var(--hcs-red); color:var(--hcs-red); }
   .frow { display:flex; gap:8px; flex-wrap:wrap; }
   .frow > * { flex:1; min-width:120px; }
@@ -250,7 +259,27 @@
         document.body.appendChild(ov); trap_(ov); field.focus();
       });
     }
-    return { esc:esc, toast:toast, el:el, modal:modal, confirm:confirm, prompt:prompt };
+    /* Inline SVG icon set (stroke = currentColor). Replaces emoji glyphs so the UI renders
+       identically across platforms/fonts. Usage: FormsUI.icon('trash') or icon('info',{size:14}). */
+    var ICON_PATHS = {
+      up:'<path d="M12 19V5M5 12l7-7 7 7"/>',
+      down:'<path d="M12 5v14M19 12l-7 7-7-7"/>',
+      dup:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/>',
+      trash:'<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>',
+      chevron:'<path d="M6 9l6 6 6-6"/>',
+      check:'<path d="M20 6L9 17l-5-5"/>',
+      eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+      clip:'<path d="M21 8.5l-9.2 9.2a4 4 0 0 1-5.7-5.7l8.5-8.5a2.5 2.5 0 0 1 3.5 3.5l-8.5 8.5a1 1 0 0 1-1.4-1.4l7.8-7.8"/>',
+      plus:'<path d="M12 5v14M5 12h14"/>',
+      info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+      edit:'<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+      grip:'<circle cx="9" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.3" fill="currentColor" stroke="none"/>'
+    };
+    function icon(name, opts){
+      opts = opts || {}; var s = opts.size || 16;
+      return '<svg class="hcsi'+(opts.cls?' '+opts.cls:'')+'" width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+(ICON_PATHS[name]||'')+'</svg>';
+    }
+    return { esc:esc, toast:toast, el:el, modal:modal, confirm:confirm, prompt:prompt, icon:icon };
   })();
 </script>
 
@@ -611,7 +640,7 @@
     chrome(
       '<div style="display:flex;align-items:center;gap:10px;margin:16px 0">' + back +
         '<h1 class="form-title" style="margin:0;font-size:1.2rem">Editing: ' + esc(EDITING.meta.title) + '</h1>' +
-        '<span id="saveState" class="help" style="margin-left:auto">✓ Saved</span></div>' +
+        '<span id="saveState" class="help" style="margin-left:auto;display:inline-flex;align-items:center;gap:5px">' + FormsUI.icon('check', { size: 14 }) + ' Saved</span></div>' +
       '<div class="editor" id="editorRoot"><div>' + lockBanner +
         '<div class="field"><label for="fTitle">Form title</label><input class="control" id="fTitle" value="' + esc(EDITING.schema.title || '') + '"' + (locked ? ' readonly' : '') + '></div>' +
         '<div class="field" style="margin-top:10px"><label for="fDesc">Description</label><textarea class="control" id="fDesc"' + (locked ? ' readonly' : '') + '>' + esc(EDITING.schema.description || '') + '</textarea></div>' +
@@ -645,7 +674,7 @@
     host.innerHTML = fs.map(function (f, i) { return fieldCard(f, i, locked); }).join('');
     if (locked) return;
     fs.forEach(function (f, i) {
-      bindInput('lbl_' + f.id, function (v) { f.label = v; });
+      bindInput('lbl_' + f.id, function (v) { f.label = v; var lp = document.querySelector('.fieldcard[data-fid="' + f.id + '"] .fclabel'); if (lp) lp.textContent = v; });
       bindInput('help_' + f.id, function (v) { f.help = v; });
       var reqEl = document.getElementById('req_' + f.id); if (reqEl) reqEl.onchange = function () { f.required = this.checked; };
       var optEl = document.getElementById('opt_' + f.id); if (optEl) optEl.oninput = function () { f.options = this.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean); };
@@ -666,6 +695,8 @@
         var h = function () { if (!f.validation) f.validation = {}; f.validation[spec[1]] = spec[2] ? (this.value === '' ? null : Number(this.value)) : this.value; };
         if (el.tagName === 'SELECT') el.onchange = h; else el.oninput = h;
       });
+      var colEl = document.getElementById('col_' + f.id);
+      if (colEl) colEl.onclick = function () { var c = document.querySelector('.fieldcard[data-fid="' + f.id + '"]'); if (c) c.classList.toggle('collapsed'); };
       document.getElementById('up_' + f.id).onclick = function () { move(i, -1); markDirty(); };
       document.getElementById('dn_' + f.id).onclick = function () { move(i, 1); markDirty(); };
       document.getElementById('dup_' + f.id).onclick = function () { duplicateFieldAt(i); };
@@ -763,13 +794,16 @@
           '<input class="control" id="cval_' + f.id + '" value="' + esc((f.showIf && f.showIf.value) || '') + '" placeholder="value"></div></details>';
     }
     return '<div class="fieldcard" draggable="true" data-idx="' + i + '" data-fid="' + f.id + '"><div class="fchead">' +
-      '<span class="draghandle" title="Drag to reorder" aria-hidden="true">⠿</span>' +
+      '<span class="draghandle" title="Drag to reorder" aria-hidden="true">' + FormsUI.icon('grip') + '</span>' +
       '<span class="ftype">' + esc(typeLabel) + '</span>' +
+      '<span class="fclabel">' + esc(f.label || '') + '</span>' +
       '<div class="fcacts">' +
-      '<button class="iconbtn" id="up_' + f.id + '" title="Move up" aria-label="Move up">↑</button>' +
-      '<button class="iconbtn" id="dn_' + f.id + '" title="Move down" aria-label="Move down">↓</button>' +
-      '<button class="iconbtn" id="dup_' + f.id + '" title="Duplicate field" aria-label="Duplicate field">⧉</button>' +
-      '<button class="iconbtn" id="del_' + f.id + '" title="Delete field" aria-label="Delete field">✕</button></div></div>' + body + '</div>';
+      '<button class="iconbtn" id="col_' + f.id + '" title="Collapse / expand" aria-label="Collapse or expand this field">' + FormsUI.icon('chevron', { cls: 'col-chevron' }) + '</button>' +
+      '<button class="iconbtn" id="up_' + f.id + '" title="Move up" aria-label="Move up">' + FormsUI.icon('up') + '</button>' +
+      '<button class="iconbtn" id="dn_' + f.id + '" title="Move down" aria-label="Move down">' + FormsUI.icon('down') + '</button>' +
+      '<button class="iconbtn" id="dup_' + f.id + '" title="Duplicate field" aria-label="Duplicate field">' + FormsUI.icon('dup') + '</button>' +
+      '<button class="iconbtn" id="del_' + f.id + '" title="Delete field" aria-label="Delete field">' + FormsUI.icon('trash') + '</button></div></div>' +
+      '<div class="fcbody">' + body + '</div></div>';
   }
   function condFieldOpts(cur) {
     var sel = (cur.showIf && cur.showIf.field) || '';
@@ -868,24 +902,24 @@
         opt('open', 'Open (anyone with link)', s.access) + opt('private', 'Private (FACTS email)', s.access) + opt('staff', 'Staff only (SSO)', s.access) + '</select>' +
       '<label class="lbl">Status</label><select class="control" id="sLife">' +
         opt('draft', 'Draft', s.lifecycle) + opt('published', 'Published', s.lifecycle) + opt('closed', 'Closed', s.lifecycle) + '</select>' +
-      '<div class="switchrow"><span>Not accepting responses</span><span class="toggle"><input type="checkbox" id="sLock"' + (s.locked ? ' checked' : '') + '><span class="sl"></span></span></div>' +
-      '<div class="switchrow"><span>Review mode — send both emails to the submitter</span><span class="toggle"><input type="checkbox" id="sReview"' + (s.reviewMode ? ' checked' : '') + '><span class="sl"></span></span></div>' +
-      '<div class="switchrow"><span>Limit to one response per person</span><span class="toggle"><input type="checkbox" id="sOnce"' + (s.onePerEmail ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+      '<div class="switchrow"><span>Not accepting responses' + info('Temporarily closes the form to new submissions without unpublishing it — submitters see a friendly “not accepting responses” message.') + '</span><span class="toggle"><input type="checkbox" id="sLock"' + (s.locked ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+      '<div class="switchrow"><span>Review mode — send both emails to the submitter' + info('The email the submitter enters gets BOTH the confirmation (as the requester) and a copy of the owner notification (as the reviewer). Useful when one person builds and submits the form.') + '</span><span class="toggle"><input type="checkbox" id="sReview"' + (s.reviewMode ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+      '<div class="switchrow"><span>Limit to one response per person' + info('Blocks a second submission from the same email address (verified email for parent/staff forms, or the entered email on open forms).') + '</span><span class="toggle"><input type="checkbox" id="sOnce"' + (s.onePerEmail ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<label class="lbl">Notify on submit (emails, comma-sep)</label><input class="control" id="sNotify" value="' + esc((s.notifyEmails || []).join(', ')) + '">' +
       '<label class="lbl">Confirmation message</label><textarea class="control" id="sConfirm">' + esc(s.confirmationMessage || '') + '</textarea>' +
       '<div class="divider"></div><h4>Response record</h4>' +
-      '<div class="switchrow"><span>Attach a PDF copy to the confirmation email</span><span class="toggle"><input type="checkbox" id="sPdf"' + (s.pdfCopy ? ' checked' : '') + '><span class="sl"></span></span></div>' +
-      '<div class="switchrow"><span>Let people edit or withdraw their response (adds a link to the receipt)</span><span class="toggle"><input type="checkbox" id="sEdit"' + (s.allowEdit ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+      '<div class="switchrow"><span>Attach a PDF copy to the confirmation email' + info('The submitter’s receipt email includes a branded PDF of their answers. Great for signed permission slips, physicals, and KI forms. A copy is also saved in the form’s Uploads folder.') + '</span><span class="toggle"><input type="checkbox" id="sPdf"' + (s.pdfCopy ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+      '<div class="switchrow"><span>Let people edit or withdraw their response' + info('Adds a secure “Edit or withdraw” link to the receipt email. They can change answers or cancel while the response is still Submitted or Pending Approval — no login needed.') + '</span><span class="toggle"><input type="checkbox" id="sEdit"' + (s.allowEdit ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<div class="divider"></div><h4>Scheduling &amp; limits</h4>' +
       '<label class="lbl">Opens (optional)</label><input class="control" id="sOpen" type="datetime-local" value="' + esc(s.openDate || '') + '">' +
       '<label class="lbl">Closes (optional)</label><input class="control" id="sClose" type="datetime-local" value="' + esc(s.closeDate || '') + '">' +
       '<label class="lbl">Max total responses (0 = unlimited)</label><input class="control" id="sMax" type="number" min="0" value="' + esc(s.maxResponses || 0) + '">' +
       '<div class="divider"></div><h4>Approvals</h4>' +
-      '<div class="switchrow"><span>Require approval before it’s final</span><span class="toggle"><input type="checkbox" id="aEn"' + (ap.enabled ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+      '<div class="switchrow"><span>Require approval before it’s final' + info('Submissions land as “Pending Approval” and route to the approvers below. They approve/reject from the Approvals tab; the submitter is emailed the decision.') + '</span><span class="toggle"><input type="checkbox" id="aEn"' + (ap.enabled ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<label class="lbl">Approvers (emails or group names, comma-sep)</label><input class="control" id="aWho" value="' + esc((ap.approvers || []).join(', ')) + '">' +
       '<label class="lbl">Require</label><select class="control" id="aMode">' + opt('any', 'Any one approver', ap.mode || 'any') + opt('all', 'All approvers', ap.mode || 'any') + '</select>' +
       '<div class="divider"></div>' +
-      (EDITING.structureLocked ? '' : '<button class="btn gold block" id="btnParent" style="margin-bottom:8px">➕ This form is for Parents</button>') +
+      (EDITING.structureLocked ? '' : '<button class="btn gold block" id="btnParent" style="margin-bottom:8px;display:inline-flex;align-items:center;justify-content:center;gap:6px">' + FormsUI.icon('plus') + ' This form is for Parents</button>') +
       '<button class="btn block" id="btnSave">Save</button>' +
       '<button class="btn ghost block" id="btnPreview" style="margin-top:8px">Preview as submitter</button>' +
       '<button class="btn ghost block" id="btnShare" style="margin-top:8px">Get share link</button>' +
@@ -893,6 +927,8 @@
       '</div>';
   }
   function opt(v, label, sel) { return '<option value="' + v + '"' + (sel === v ? ' selected' : '') + '>' + esc(label) + '</option>'; }
+  // Small hover/focus tooltip icon for settings — native title + accessible label.
+  function info(text) { return ' <span class="infoicon" tabindex="0" role="img" title="' + esc(text) + '" aria-label="' + esc(text) + '">' + FormsUI.icon('info', { size: 14 }) + '</span>'; }
   function syncSideAccess() { var el = document.getElementById('sAccess'); if (el) el.value = EDITING.schema.settings.access; }
 
   function wireSide() {
@@ -927,7 +963,7 @@
     return { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, pdfCopy: !!s.pdfCopy, allowEdit: !!s.allowEdit, openDate: s.openDate || '', closeDate: s.closeDate || '', maxResponses: Number(s.maxResponses) || 0, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage };
   }
   function markDirty() { DIRTY = true; setDirtyDot(true); scheduleAutosave(); }
-  function setDirtyDot(on) { var d = document.getElementById('saveState'); if (d) d.textContent = on ? '● Unsaved…' : '✓ Saved'; }
+  function setDirtyDot(on) { var d = document.getElementById('saveState'); if (d) d.innerHTML = on ? '● Unsaved…' : FormsUI.icon('check', { size: 14 }) + ' Saved'; }
   function scheduleAutosave() { if (EDITING && EDITING.structureLocked) return; clearTimeout(AUTOSAVE_T); AUTOSAVE_T = setTimeout(function () { doSave(true); }, 1500); }
   /** Save schema + settings. silent=true for autosave (no toast, no button spinner). Returns a promise. */
   function doSave(silent) {
