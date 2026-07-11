@@ -338,8 +338,8 @@
   var FIELD_TYPES = [
     ['sectionHeader', 'Section'], ['description', 'Text block'], ['text', 'Short text'],
     ['textarea', 'Paragraph'], ['email', 'Email'], ['phone', 'Phone'], ['number', 'Number'],
-    ['date', 'Date'], ['dropdown', 'Dropdown'], ['radio', 'Multiple choice'],
-    ['checkboxes', 'Checkboxes'], ['yesno', 'Yes / No'],
+    ['date', 'Date'], ['time', 'Time'], ['dropdown', 'Dropdown'], ['radio', 'Multiple choice'],
+    ['checkboxes', 'Checkboxes'], ['yesno', 'Yes / No'], ['rating', 'Rating'],
     ['studentPicker', 'Student picker'], ['staffPicker', 'Staff / teacher picker'],
     ['file', 'File upload'], ['signature', 'Signature'],
     ['pageBreak', 'Page break'], ['calculation', 'Calculation']
@@ -660,6 +660,12 @@
       var calcop = document.getElementById('calcop_' + f.id), calcsrc = document.getElementById('calcsrc_' + f.id);
       var updCalc = function () { if (!f.calc) f.calc = { op: 'sum', fields: [] }; if (calcop) f.calc.op = calcop.value; if (calcsrc) f.calc.fields = Array.prototype.slice.call(calcsrc.querySelectorAll('input:checked')).map(function (i) { return i.value; }); };
       if (calcop) calcop.onchange = updCalc; if (calcsrc) calcsrc.addEventListener('change', updCalc);
+      var rmaxEl = document.getElementById('rmax_' + f.id); if (rmaxEl) rmaxEl.oninput = function () { f.max = Number(this.value) || 5; };
+      [['vmin_', 'min', 1], ['vmax_', 'max', 1], ['vminl_', 'minLen', 1], ['vmaxl_', 'maxLen', 1], ['vpat_', 'pattern', 0], ['vpmsg_', 'patternMsg', 0], ['vmind_', 'minDate', 0], ['vmaxd_', 'maxDate', 0], ['vnb_', 'notBefore', 0]].forEach(function (spec) {
+        var el = document.getElementById(spec[0] + f.id); if (!el) return;
+        var h = function () { if (!f.validation) f.validation = {}; f.validation[spec[1]] = spec[2] ? (this.value === '' ? null : Number(this.value)) : this.value; };
+        if (el.tagName === 'SELECT') el.onchange = h; else el.oninput = h;
+      });
       document.getElementById('up_' + f.id).onclick = function () { move(i, -1); markDirty(); };
       document.getElementById('dn_' + f.id).onclick = function () { move(i, 1); markDirty(); };
       document.getElementById('dup_' + f.id).onclick = function () { duplicateFieldAt(i); };
@@ -745,6 +751,10 @@
         body += '<details class="adv"><summary>Advanced</summary><label class="lbl">Auto-fill from FACTS</label>' +
           '<select class="control" id="pf_' + f.id + '">' + prefillOpts(f.prefillFrom) + '</select></details>';
       }
+      if (f.type === 'rating') {
+        body += '<label class="lbl">Scale maximum</label><input class="control" type="number" min="2" max="10" id="rmax_' + f.id + '" value="' + (f.max || 5) + '">';
+      }
+      body += valBlock(f);
       body += '<details class="adv"><summary>Conditional logic</summary>' +
         '<label class="lbl">Show this field only if…</label>' +
         '<div class="frow">' +
@@ -774,6 +784,25 @@
     var sel = (showIf && showIf.op) || 'equals';
     return [['equals', 'equals'], ['notEquals', 'does not equal'], ['contains', 'contains'], ['notEmpty', 'is not empty'], ['empty', 'is empty']]
       .map(function (o) { return '<option value="' + o[0] + '"' + (sel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('');
+  }
+  function dateFieldOpts(cur, sel) {
+    var o = '<option value="">— none —</option>';
+    fields().forEach(function (f) { if (f.id === cur.id || f.type !== 'date') return; o += '<option value="' + f.id + '"' + (sel === f.id ? ' selected' : '') + '>' + esc(f.label || f.id) + '</option>'; });
+    return o;
+  }
+  function valBlock(f) {
+    var vr = f.validation || {}, inner = '';
+    if (f.type === 'number') {
+      inner = '<div class="frow"><input class="control" type="number" id="vmin_' + f.id + '" value="' + esc(vr.min != null ? vr.min : '') + '" placeholder="Min"><input class="control" type="number" id="vmax_' + f.id + '" value="' + esc(vr.max != null ? vr.max : '') + '" placeholder="Max"></div>';
+    } else if (['text', 'textarea', 'email', 'phone'].indexOf(f.type) > -1) {
+      inner = '<div class="frow"><input class="control" type="number" id="vminl_' + f.id + '" value="' + esc(vr.minLen || '') + '" placeholder="Min length"><input class="control" type="number" id="vmaxl_' + f.id + '" value="' + esc(vr.maxLen || '') + '" placeholder="Max length"></div>' +
+        '<input class="control" id="vpat_' + f.id + '" value="' + esc(vr.pattern || '') + '" placeholder="Pattern (regex, optional)" style="margin-top:6px">' +
+        '<input class="control" id="vpmsg_' + f.id + '" value="' + esc(vr.patternMsg || '') + '" placeholder="Message if pattern fails" style="margin-top:6px">';
+    } else if (f.type === 'date') {
+      inner = '<div class="frow"><input class="control" type="date" id="vmind_' + f.id + '" value="' + esc(vr.minDate || '') + '"><input class="control" type="date" id="vmaxd_' + f.id + '" value="' + esc(vr.maxDate || '') + '"></div>' +
+        '<label class="lbl">Must be on/after another date field</label><select class="control" id="vnb_' + f.id + '">' + dateFieldOpts(f, vr.notBefore) + '</select>';
+    } else { return ''; }
+    return '<details class="adv"><summary>Validation</summary>' + inner + '</details>';
   }
   function capToText(cap) { cap = cap || {}; return Object.keys(cap).map(function (k) { return k + ' = ' + cap[k]; }).join('\n'); }
   function parseCap(text) {
@@ -808,6 +837,7 @@
     if (OPTION_TYPES[type]) f.options = ['Option 1'];
     if (type === 'sectionHeader') f.label = 'Section title';
     if (type === 'calculation') f.calc = { op: 'sum', fields: [] };
+    if (type === 'rating') f.max = 5;
     fields().push(f); renderCanvas(); markDirty();
     setTimeout(function () { var el = document.getElementById('lbl_' + f.id); if (el) el.focus(); }, 30);
   }

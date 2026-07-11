@@ -518,6 +518,10 @@
     applyPrefill();
     initSignatures();
     restoreDraft();
+    // URL-parameter prefill (staff-shared links): ?fieldId=value
+    if (typeof URL_PREFILL === 'object' && URL_PREFILL) {
+      FIELDS.forEach(function (f) { if (URL_PREFILL[f.id] != null && URL_PREFILL[f.id] !== '') writeValue(f, URL_PREFILL[f.id]); });
+    }
     recomputeCalc();
     applyVisibility();
     host.addEventListener('input', onFieldChange);
@@ -636,7 +640,7 @@
   }
   function writeValue(f, v) {
     var name = 'f_' + f.id;
-    if (isMultiField(f) || f.type === 'radio' || f.type === 'yesno') {
+    if (isMultiField(f) || f.type === 'radio' || f.type === 'yesno' || f.type === 'rating') {
       var arr = Array.isArray(v) ? v : [v];
       document.querySelectorAll('input[name="' + name + '"]').forEach(function (inp) {
         if (arr.indexOf(inp.value) > -1) { inp.checked = true; var box = inp.closest('.choice'); if (box) box.classList.add('selected'); }
@@ -692,6 +696,14 @@
           '<input class="control" id="' + name + '" placeholder="Type your full name" style="margin-top:8px">'; break;
       }
       case 'date':  ctrl = '<input class="control" type="date" id="' + name + '">'; break;
+      case 'time':  ctrl = '<input class="control" type="time" id="' + name + '">'; break;
+      case 'rating': {
+        var rmax = Number(f.max) || 5;
+        var rOpts = []; for (var ri = 1; ri <= rmax; ri++) rOpts.push(String(ri));
+        ctrl = '<div class="choices" style="flex-direction:row;flex-wrap:wrap">' + rOpts.map(function (o) {
+          return '<label class="choice" style="flex:0 0 auto"><input type="radio" name="' + name + '" value="' + o + '"><span>' + o + '</span></label>';
+        }).join('') + '</div>'; break;
+      }
       case 'number':ctrl = '<input class="control" type="number" id="' + name + '" placeholder="' + FormsUI.esc(f.placeholder) + '">'; break;
       case 'email': ctrl = '<input class="control" type="email" id="' + name + '" placeholder="' + FormsUI.esc(f.placeholder) + '">'; break;
       case 'phone': ctrl = '<input class="control" type="tel" id="' + name + '" placeholder="' + FormsUI.esc(f.placeholder) + '">'; break;
@@ -897,7 +909,7 @@
     var name = 'f_' + f.id;
     if (f.type === 'calculation') { var ce = document.getElementById(name); return ce ? ce.textContent.trim() : ''; }
     if (isMultiField(f)) return Array.prototype.slice.call(document.querySelectorAll('input[name="' + name + '"]:checked')).map(function (i) { return i.value; });
-    if (f.type === 'radio' || f.type === 'yesno') { var c = document.querySelector('input[name="' + name + '"]:checked'); return c ? c.value : ''; }
+    if (f.type === 'radio' || f.type === 'yesno' || f.type === 'rating') { var c = document.querySelector('input[name="' + name + '"]:checked'); return c ? c.value : ''; }
     var el = document.getElementById(name); return el ? el.value.trim() : '';
   }
   function fieldEmpty(f, v) { return isMultiField(f) ? v.length === 0 : v === ''; }
