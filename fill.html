@@ -292,6 +292,20 @@ function computeCalc(field, answers) {
   });
   return String(Math.round(sum * 100) / 100);
 }
+
+/**
+ * The grade AFTER the given one, for "registering for next year" defaults. Handles the HCS
+ * ladder K3→K4→K5→1→…→12; a graduating 12th-grader returns 'Graduated'. Tolerates FACTS
+ * formatting ('09'→'9', bare 'K'→'K5'). Unknown/blank grade → '' (leave the field for the user).
+ */
+function nextGrade(g) {
+  var norm = String(g == null ? '' : g).trim().toUpperCase().replace(/^0+(?=\d)/, '');
+  if (norm === 'K') norm = 'K5';
+  var ladder = ['K3', 'K4', 'K5', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+  var i = ladder.indexOf(norm);
+  if (i === -1) return '';
+  return i === ladder.length - 1 ? 'Graduated' : ladder[i + 1];
+}
 </script>
 
 <script>
@@ -342,13 +356,13 @@ function computeCalc(field, answers) {
           { id:'info', type:'textarea', label:'Anything else we should know?' } ]}] } },
       'demo-physical': { access:'private', form:{ id:'demo-physical', title:'Sports Physical + Signature',
         description:'Private demo showing file upload + e-signature. Verify with any email + any 6-digit code.',
-        confirmationMessage:'Received! (Demo.)', locked:false, reviewMode:true, pages:[{ title:'Main', fields:[
+        confirmationMessage:'Received! (Demo.)', locked:false, reviewMode:true, multiStudent:true, pages:[{ title:'Main', fields:[
           { id:'secP', type:'sectionHeader', label:'Parent / guardian' },
           { id:'pf', type:'text', label:'First name', required:true, prefillFrom:'parentFirst' },
           { id:'pl', type:'text', label:'Last name', required:true, prefillFrom:'parentLast' },
           { id:'pe', type:'email', label:'Email', required:true, prefillFrom:'parentEmail' },
           { id:'stu', type:'studentPicker', label:'Student', required:true },
-          { id:'sports', type:'checkboxes', label:'Sport(s) this year', options:['Soccer','Volleyball','Cross Country','Basketball','Cheerleading','Baseball','Softball','Track & Field','Golf','Tennis','Esports'], help:'Multi-select (real form pre-checks last year’s sports).' },
+          { id:'sports', type:'checkboxes', label:'Sport(s) this year', priorYear:true, options:['Soccer','Volleyball','Cross Country','Basketball','Cheerleading','Baseball','Softball','Track & Field','Golf','Tennis','Esports'], help:'Pre-checked from last year once you pick a student (demo).' },
           { id:'up', type:'file', label:'Upload the physical (PDF or photo)', required:true, accept:'.pdf,image/*', help:'Max 10 MB.' },
           { id:'sig', type:'signature', label:'Parent signature', required:true, help:'Sign in the box; type your name below.' } ]}] } },
       'demo-trip': { access:'open', form:{ id:'demo-trip', title:'Field Trip Request (demo)',
@@ -362,7 +376,7 @@ function computeCalc(field, answers) {
           { id:'cost', type:'number', label:'Estimated cost per student', money:true, help:'Recorded as a dollar amount in the sheet.' } ]}] } },
       'demo-course': { access:'private', form:{ id:'demo-course', title:'Course Selection Guide',
         description:'Shows CONDITIONAL SECTIONS — choose a grade and only that grade’s courses appear. Verify with any email + any 6-digit code.',
-        confirmationMessage:'Course selections submitted! (Demo.)', locked:false, reviewMode:false, pages:[{ title:'Main', fields:[
+        confirmationMessage:'Course selections submitted! (Demo.)', locked:false, reviewMode:false, multiStudent:true, pages:[{ title:'Main', fields:[
           { id:'faq', type:'faq', label:'Frequently Asked Questions', items:[
             { q:'How many study halls can I take?', a:'Up to one per semester for grades 9–11; seniors may take two.' },
             { q:'What about dual enrollment?', a:'Juniors and seniors in good standing may dual-enroll at approved colleges; see the registrar.' },
@@ -417,7 +431,8 @@ function computeCalc(field, answers) {
         return {ok:true, form:s.form, verifiedVia: token?'otp':'open', prefill: token?PREFILL:null }; },
       authRequestOtp: function(){ return {ok:true, msg:'(Demo) enter any 6-digit code.'}; },
       authVerifyOtp: function(email, code){ return /^\d{6}$/.test(String(code||'')) ? {ok:true,token:'demo',email:email} : {ok:false,msg:'Enter any 6-digit code (demo).'}; },
-      submitForm: function(formId){ return {ok:true, submissionId:'DEMO-'+Math.floor(Math.random()*100000), message:FORMS[formId].form.confirmationMessage}; }
+      submitForm: function(formId){ return {ok:true, submissionId:'DEMO-'+Math.floor(Math.random()*100000), message:FORMS[formId].form.confirmationMessage}; },
+      getPriorAnswersForStudent: function(){ return {ok:true, answers:{ sports:['Soccer','Track & Field'] }}; }
     };
     function runnerObj(){ var s=null,f=null; var o={ withSuccessHandler:function(fn){s=fn;return o;}, withFailureHandler:function(fn){f=fn;return o;} };
       Object.keys(API).forEach(function(m){ o[m]=function(){ var a=arguments; setTimeout(function(){ try{ s&&s(API[m].apply(null,a)); }catch(e){ f&&f(e); } },140); }; }); return o; }
@@ -453,6 +468,9 @@ function computeCalc(field, answers) {
   var PAGES = [];       // [{ title, fields:[...] }] split at pageBreak markers
   var CUR = 0;          // current page index
   var LOCKED = false;
+  var FORM = null;      // the current form object (for "save & add another child")
+  var LAST_ANSWERS = null; // answers of the just-submitted response (to carry over between children)
+  var REVIEW_SHOWN = false; // show the review-mode "two emails" notice only once per session
 
   loadForm();
 
@@ -602,6 +620,7 @@ function computeCalc(field, answers) {
 
   // ---------- render form ----------
   function renderForm(form) {
+    FORM = form;
     FIELDS = []; VISALL = [];
     var body = '<div class="card flush-top card-pad stack">';
     if (IS_PREVIEW) body += '<div class="notice info">' + FormsUI.icon('eye') + ' <strong>Preview</strong> — this is exactly what submitters see (with sample data). Nothing is saved.</div>';
@@ -663,7 +682,8 @@ function computeCalc(field, answers) {
     var so = document.getElementById('signOut'); if (so) so.addEventListener('click', signOut);
     CUR = 0; showPage(0);
 
-    if (form.reviewMode) {
+    if (form.reviewMode && !REVIEW_SHOWN) {
+      REVIEW_SHOWN = true;
       var demo = (typeof window !== 'undefined' && window.PREVIEW) ? ' <em>(This is a demo — no email is actually sent.)</em>' : '';
       FormsUI.modal('Before you begin',
         'The email address you enter will receive <strong>two emails</strong> after you submit: a <strong>confirmation</strong> (to you as the requester) and a copy of the <strong>notification the form’s owner receives</strong>.' + demo,
@@ -1013,6 +1033,12 @@ function computeCalc(field, answers) {
   function refreshStudentDerived() {
     var s = selectedStudent();
     FIELDS.forEach(function (f) {
+      if (f.prefillFrom === 'studentGradeNextYear') {
+        // seed the next grade up (current+1) but leave EDITABLE so a parent can override
+        var ng = s && typeof nextGrade === 'function' ? nextGrade(s.grade) : '';
+        if (ng) setVal(f.id, ng);
+        return;
+      }
       if (f.prefillFrom !== 'studentGrade' && f.prefillFrom !== 'studentName') return;
       var v = s ? (f.prefillFrom === 'studentGrade' ? s.grade : s.displayName) : '';
       setVal(f.id, v);
@@ -1020,6 +1046,23 @@ function computeCalc(field, answers) {
       // with 0 or >1 students selected can still complete a required field (no dead-end).
       if (v) lockField(f.id, true); else lockField(f.id, false);
     });
+    maybePriorYear();
+  }
+  // Pre-fill "remembered" fields (priorYear) from this student's most recent prior submission to
+  // this same form. Server-guarded to the OTP parent's own students; applied as editable defaults.
+  function maybePriorYear() {
+    if (VIA !== 'otp' || IS_PREVIEW || IS_EDIT) return;
+    if (!FIELDS.some(function (f) { return f.priorYear; })) return;
+    var s = selectedStudent(); if (!s) return;
+    google.script.run.withSuccessHandler(function (res) {
+      if (!res || !res.ok || !res.answers) return;
+      FIELDS.forEach(function (f) {
+        if (!f.priorYear || res.answers[f.id] == null) return;
+        var cur = readValue(f);
+        if (fieldEmpty(f, cur)) writeValue(f, res.answers[f.id]); // don't clobber edits
+      });
+      applyVisibility();
+    }).getPriorAnswersForStudent(FORM_ID, TOKEN, s.displayName);
   }
   function lockField(id, on) {
     var el = document.getElementById('f_' + id);
@@ -1075,6 +1118,7 @@ function computeCalc(field, answers) {
       return;
     }
     formErr.style.display = 'none';
+    LAST_ANSWERS = answers; // remembered so "add another child" can carry the parent/common fields over
     if (IS_PREVIEW) { onSubmitDone({ ok: true, message: 'This is a preview — your response was NOT saved.', submissionId: 'PREVIEW' }); return; }
     var btn = document.getElementById('submitBtn'); btn.disabled = true;
     var label = IS_EDIT ? 'Save changes' : 'Submit';
@@ -1116,6 +1160,8 @@ function computeCalc(field, answers) {
       return;
     }
     if (!IS_EDIT) clearDraft();
+    var canAddChild = !IS_PREVIEW && !IS_EDIT && FORM && FORM.multiStudent && VIA === 'otp' &&
+      FIELDS.some(function (f) { return f.type === 'studentPicker'; });
     var nextStep = res.status === 'Pending Approval'
       ? '<div class="notice info" style="text-align:left">Your submission will be reviewed. You’ll get an email with the decision.</div>' : '';
     shell('<div class="card flush-top card-pad center stack">' +
@@ -1124,8 +1170,25 @@ function computeCalc(field, answers) {
       '<p class="form-desc">' + FormsUI.esc(res.message) + '</p>' +
       nextStep +
       '<p class="help">Reference: ' + FormsUI.esc(res.submissionId) + '</p>' +
-      (IS_PREVIEW || IS_EDIT ? '' : '<button class="btn ghost" type="button" onclick="location.reload()">Submit another response</button>') +
+      (canAddChild ? '<button class="btn block" id="addChildBtn" type="button">' + FormsUI.icon('plus') + ' Save &amp; add another child</button>' : '') +
+      (IS_PREVIEW || IS_EDIT ? '' : '<button class="btn ghost" type="button" onclick="location.reload()">' + (canAddChild ? 'I’m done' : 'Submit another response') + '</button>') +
       '</div>');
+    var acb = document.getElementById('addChildBtn'); if (acb) acb.onclick = addAnotherChild;
+  }
+
+  // Re-open the form for the parent's NEXT child: keep parent + common answers, reset the student
+  // (and student-derived + file/signature fields). Produces a separate response row per child.
+  function addAnotherChild() {
+    var keep = LAST_ANSWERS || {};
+    renderForm(FORM); // fresh render — applyPrefill re-fills parent fields and resets the picker
+    FIELDS.forEach(function (f) {
+      if (f.type === 'studentPicker' || f.type === 'file' || f.type === 'signature') return;
+      if (f.prefillFrom === 'studentGrade' || f.prefillFrom === 'studentName' || f.prefillFrom === 'studentGradeNextYear') return;
+      if (keep[f.id] != null) writeValue(f, keep[f.id]);
+    });
+    recomputeCalc(); applyVisibility();
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
+    FormsUI.toast('Your info was kept — now choose your next child');
   }
 })();
 </script>

@@ -994,7 +994,8 @@
   }
   function prefillOpts(sel) {
     return [['', '— none —'], ['parentFirst', 'Parent first name'], ['parentLast', 'Parent last name'],
-      ['parentEmail', 'Parent email (locked)'], ['studentGrade', 'Student grade'], ['studentName', 'Student name']]
+      ['parentEmail', 'Parent email (locked)'], ['studentGrade', 'Student grade'],
+      ['studentGradeNextYear', 'Next year’s grade (editable)'], ['studentName', 'Student name']]
       .map(function (o) { return '<option value="' + o[0] + '"' + (sel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('');
   }
   function bindInput(id, cb) { var el = document.getElementById(id); if (el) el.oninput = function () { cb(this.value); }; }
@@ -1040,6 +1041,7 @@
       '<div class="switchrow"><span>Not accepting responses' + info('Temporarily closes the form to new submissions without unpublishing it — submitters see a friendly “not accepting responses” message.') + '</span><span class="toggle"><input type="checkbox" id="sLock"' + (s.locked ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<div class="switchrow"><span>Review mode — send both emails to the submitter' + info('The email the submitter enters gets BOTH the confirmation (as the requester) and a copy of the owner notification (as the reviewer). Useful when one person builds and submits the form.') + '</span><span class="toggle"><input type="checkbox" id="sReview"' + (s.reviewMode ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<div class="switchrow"><span>Limit to one response per person' + info('Blocks a second submission from the same email address (verified email for parent/staff forms, or the entered email on open forms).') + '</span><span class="toggle"><input type="checkbox" id="sOnce"' + (s.onePerEmail ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+      '<div class="switchrow"><span>Allow "Save &amp; add another child"' + info('After submitting, a parent can keep their entered info and quickly submit again for another of their children (one response per child). Best for per-student forms with a student picker.') + '</span><span class="toggle"><input type="checkbox" id="sMulti"' + (s.multiStudent ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<label class="lbl">Notify on submit (emails, comma-sep)</label><input class="control" id="sNotify" value="' + esc((s.notifyEmails || []).join(', ')) + '"><div id="sNotifyWarn" class="help" style="color:var(--hcs-red);display:none">Only @harfordchristian.org addresses are allowed — others are dropped when you save.</div>' +
       '<label class="lbl">Confirmation message</label><textarea class="control" id="sConfirm">' + esc(s.confirmationMessage || '') + '</textarea>' +
       '<div class="divider"></div><h4>Response record</h4>' +
@@ -1085,6 +1087,7 @@
     document.getElementById('sLock').onchange = function () { s.locked = this.checked; };
     document.getElementById('sReview').onchange = function () { s.reviewMode = this.checked; };
     document.getElementById('sOnce').onchange = function () { s.onePerEmail = this.checked; };
+    document.getElementById('sMulti').onchange = function () { s.multiStudent = this.checked; };
     document.getElementById('sPdf').onchange = function () { s.pdfCopy = this.checked; };
     document.getElementById('sEdit').onchange = function () { s.allowEdit = this.checked; };
     document.getElementById('sOpen').onchange = function () { s.openDate = this.value; };
@@ -1116,7 +1119,7 @@
   }
 
   function stateFromSettings_(s) {
-    return { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, pdfCopy: !!s.pdfCopy, allowEdit: !!s.allowEdit, openDate: s.openDate || '', closeDate: s.closeDate || '', maxResponses: Number(s.maxResponses) || 0, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage };
+    return { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, multiStudent: !!s.multiStudent, pdfCopy: !!s.pdfCopy, allowEdit: !!s.allowEdit, openDate: s.openDate || '', closeDate: s.closeDate || '', maxResponses: Number(s.maxResponses) || 0, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage };
   }
   function markDirty() { DIRTY = true; setDirtyDot(true); scheduleAutosave(); }
   function setDirtyDot(on) { var d = document.getElementById('saveState'); if (d) d.innerHTML = on ? '● Unsaved…' : FormsUI.icon('check', { size: 14 }) + ' Saved'; }
