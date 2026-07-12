@@ -418,9 +418,41 @@ function nextGrade(g) {
           { id:'sd', type:'date', label:'First day of absence', required:true },
           { id:'ed', type:'date', label:'Last day of absence', required:true },
           { id:'reason', type:'textarea', label:'Reason / destination for the trip', required:true },
+          { id:'sig', type:'signature', label:'Parent / guardian signature', required:true } ]}] } },
+      'demo-medication': { access:'private', form:{ id:'demo-medication', title:'Medication Authorization',
+        description:'Authorize the school to administer a medication. Verify with any email + any 6-digit code.',
+        confirmationMessage:'The health office received your authorization! (Demo.)', locked:false, reviewMode:false, multiStudent:true, pages:[{ title:'Main', fields:[
+          { id:'pe', type:'email', label:'Parent email', required:true, prefillFrom:'parentEmail' },
+          { id:'stu', type:'studentPicker', label:'Student', required:true },
+          { id:'secM', type:'sectionHeader', label:'Medication' },
+          { id:'medName', type:'text', label:'Medication name', required:true },
+          { id:'dosage', type:'text', label:'Dosage / amount', required:true, help:'e.g., 10 mg, 1 tablet' },
+          { id:'route', type:'dropdown', label:'How is it given?', required:true, options:['By mouth (oral)','Inhaler','Topical / skin','Eye / ear drops','Injection','Other'] },
+          { id:'times', type:'checkboxes', label:'When at school?', required:true, options:['Before school','Mid-morning','Lunch / midday','Afternoon','As needed (PRN)'] },
+          { id:'order', type:'file', label:'Upload the physician-signed order', required:true, accept:'.pdf,image/*', help:'PDF or clear photo.' },
+          { id:'authorize', type:'yesno', label:'Do you authorize the school to administer this medication?', required:true },
+          { id:'sig', type:'signature', label:'Parent / guardian signature', required:true } ]}] } },
+      'demo-supply': { access:'private', form:{ id:'demo-supply', title:'Supply & Project Lists',
+        description:'View your student’s supply list. CONDITIONAL — pick a grade band to see its list. Verify with any email + any 6-digit code.',
+        confirmationMessage:'You’re all set! (Demo.)', locked:false, reviewMode:false, multiStudent:true, pages:[{ title:'Main', fields:[
+          { id:'stu', type:'studentPicker', label:'Student', required:true },
+          { id:'band', type:'dropdown', label:'Which list do you need?', required:true, options:['K4 – K5','Grades 1–2','Middle School (7–8)','High School (9–12)'] },
+          { id:'l1', type:'description', label:'[EDIT: K4–K5 supply & project list goes here.]', showIf:{field:'band',op:'equals',value:'K4 – K5'} },
+          { id:'l2', type:'description', label:'[EDIT: Grades 1–2 supply & project list goes here.]', showIf:{field:'band',op:'equals',value:'Grades 1–2'} },
+          { id:'l3', type:'description', label:'[EDIT: Middle School 7–8 supply & project list goes here.]', showIf:{field:'band',op:'equals',value:'Middle School (7–8)'} },
+          { id:'l4', type:'description', label:'[EDIT: High School 9–12 supply & project list goes here.]', showIf:{field:'band',op:'equals',value:'High School (9–12)'} },
+          { id:'ack', type:'yesno', label:'I have reviewed my student’s supply list.', required:true } ]}] } },
+      'demo-athome': { access:'private', form:{ id:'demo-athome', title:'At-Home Learning Request',
+        description:'Request at-home learning; routes to an administrator for approval. Verify with any email + any 6-digit code.',
+        confirmationMessage:'Submitted for administrator approval! (Demo.)', locked:false, reviewMode:false, multiStudent:true, pages:[{ title:'Main', fields:[
+          { id:'pe', type:'email', label:'Parent email', required:true, prefillFrom:'parentEmail' },
+          { id:'students', type:'studentPicker', label:'Which student(s)?', required:true, multiple:true },
+          { id:'reason', type:'dropdown', label:'Reason', required:true, options:['Illness / medical','Family circumstance','Extended travel','Temporary transition','Other'] },
+          { id:'sd', type:'date', label:'Start date', required:true },
+          { id:'plan', type:'textarea', label:'Learning plan / details', required:true },
           { id:'sig', type:'signature', label:'Parent / guardian signature', required:true } ]}] } }
     };
-    var ORDER = ['demo-open','demo-parent','demo-conference','demo-physical','demo-trip','demo-course','demo-homeschool','demo-preapproved'];
+    var ORDER = ['demo-open','demo-parent','demo-conference','demo-physical','demo-trip','demo-course','demo-homeschool','demo-preapproved','demo-medication','demo-supply','demo-athome'];
     function qs(k){ return new URLSearchParams(location.search).get(k); }
     window.FORM_ID = qs('form') && FORMS[qs('form')] ? qs('form') : 'demo-open';
     window.PREVIEW = true;
