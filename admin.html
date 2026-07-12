@@ -180,10 +180,37 @@
   .btn.ghost.danger { color:var(--hcs-red); border-color:var(--hcs-red); background:none; }
   .btn.ghost.danger:hover { background:#fbeaea; }
   .editor { display:grid; grid-template-columns:1fr 300px; gap:18px; align-items:start; }
-  @media (max-width:820px){ .editor { grid-template-columns:1fr; } }
-  .palette { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+  .editor.withprev { grid-template-columns:1fr 360px 300px; }
+  @media (max-width:1180px){ .editor.withprev { grid-template-columns:1fr 300px; } .editor.withprev #livePrevWrap { grid-column:1 / -1; grid-row:2; } }
+  @media (max-width:820px){ .editor, .editor.withprev { grid-template-columns:1fr; } }
+  .palette { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; align-items:center; }
   .palette button { font-size:.8rem; padding:6px 10px; border:1px solid var(--line-strong); border-radius:999px; background:var(--card); cursor:pointer; }
   .palette button:hover { border-color:var(--hcs-red); color:var(--hcs-red); }
+  .palgroup { flex-basis:100%; font-size:.66rem; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:6px 0 -2px; }
+  .palgroup:first-child { margin-top:0; }
+  .startchoices { display:grid; gap:10px; margin-top:6px; }
+  .startchoices button { display:block; text-align:left; background:var(--card); border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:14px 16px; cursor:pointer; font:inherit; }
+  .startchoices button:hover { border-color:var(--hcs-red); }
+  .startchoices button strong { display:block; margin-bottom:3px; }
+  .startchoices button span { color:var(--muted); font-size:.85rem; line-height:1.4; }
+  .prevpane { position:sticky; top:12px; border:1px solid var(--line); border-radius:var(--radius); background:var(--card); max-height:calc(100vh - 40px); overflow:auto; }
+  .prevpane-hd { background:var(--hcs-red); color:#fff; font-weight:700; font-size:.8rem; padding:8px 14px; border-radius:var(--radius) var(--radius) 0 0; position:sticky; top:0; }
+  #livePrev { padding:14px; }
+  #livePrev .field { margin-bottom:12px; }
+  #livePrev .fieldlabel { display:block; font-weight:600; font-size:.88rem; margin-bottom:4px; }
+  .pv-title { font-weight:800; font-size:1.05rem; margin-bottom:4px; }
+  .pv-desc { color:var(--muted); font-size:.85rem; margin:0 0 10px; }
+  .pv-break { text-align:center; font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--hcs-red); border-top:2px dashed var(--line-strong); padding-top:8px; margin:14px 0 10px; }
+  .pv-cond { font-size:.7rem; color:#8a6d00; background:#fdf6df; border-radius:6px; padding:2px 8px; display:inline-block; margin-bottom:4px; }
+  .pv-sig { border:1px dashed var(--line-strong); border-radius:8px; padding:18px; text-align:center; color:var(--muted); font-size:.85rem; }
+  .caprow { display:flex; align-items:center; gap:8px; margin:4px 0; }
+  .caprow span { flex:1; font-size:.85rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .caprow input { max-width:90px; }
+  .sgroup { border:1px solid var(--line); border-radius:8px; padding:8px 12px; margin:10px 0; background:var(--card); }
+  .sgroup > summary { cursor:pointer; font-weight:700; font-size:.85rem; color:var(--text); }
+  .sgroup > summary:hover { color:var(--hcs-red); }
+  .rtable tr[data-ri] { cursor:pointer; }
+  .rtable tr[data-ri]:hover td { background:#f7f3ea; }
   .fieldcard { border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px; margin-bottom:10px; background:var(--panel); }
   .fieldcard { cursor:default; }
   .fieldcard .fchead { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
@@ -408,8 +435,36 @@
     ['file', 'File upload'], ['signature', 'Signature'],
     ['pageBreak', 'Page break'], ['calculation', 'Calculation']
   ];
+  // Palette grouping + plain-language tooltips (school staff, not developers).
+  var TYPE_GROUPS = [
+    ['Layout', ['sectionHeader', 'description', 'faq', 'pageBreak']],
+    ['Questions', ['text', 'textarea', 'email', 'phone', 'number', 'date', 'time', 'dropdown', 'radio', 'checkboxes', 'yesno', 'rating']],
+    ['School', ['studentPicker', 'staffPicker']],
+    ['Advanced', ['file', 'signature', 'calculation']]
+  ];
+  var TYPE_TIPS = {
+    sectionHeader: 'A bold heading that groups the questions below it.',
+    description: 'A block of text or policy content — not a question.',
+    faq: 'Expandable question-and-answer pairs (tap to reveal each answer).',
+    pageBreak: 'Splits the form into steps with Next/Back buttons.',
+    text: 'One-line answer.', textarea: 'Multi-line answer.',
+    email: 'Email address (checked for a valid format).', phone: 'Phone number.',
+    number: 'Numbers only; can be formatted as money in the response sheet.',
+    date: 'Date picker.', time: 'Time picker.',
+    dropdown: 'Pick ONE from a list (compact).', radio: 'Pick ONE — all choices visible.',
+    checkboxes: 'Pick ANY number of choices.', yesno: 'A simple Yes / No.',
+    rating: 'A 1-to-N scale.',
+    studentPicker: 'On parent forms: lists ONLY that parent’s own students (from FACTS).',
+    staffPicker: 'Lists HCS staff from the Staff directory (optionally one division).',
+    file: 'Upload a document or photo.', signature: 'Draw or type a signature.',
+    calculation: 'Auto-computed sum or count of other answers (not a question).'
+  };
   var OPTION_TYPES = { dropdown: 1, radio: 1, checkboxes: 1 };
   var DIRTY = false, SAVING = false, AUTOSAVE_T = null, DRAG_FROM = null;
+  var COLLAPSED = {};           // fieldId -> true when its editor card is collapsed
+  var UNDO_STACK = [];          // JSON snapshots of EDITING.schema (structural ops)
+  var LIVEPREV = false;         // live preview pane on/off
+  try { LIVEPREV = localStorage.getItem('hcsBuilderLivePrev') === '1'; } catch (e) {}
   window.addEventListener('beforeunload', function (e) { if (DIRTY) { e.preventDefault(); e.returnValue = ''; } });
   var esc = FormsUI.esc;
 
@@ -760,28 +815,49 @@
   function renderEditor() {
     var locked = EDITING.structureLocked;
     var back = '<button class="btn ghost sm" id="back">← All forms</button>';
-    var palette = locked ? '' : '<div class="palette">' + FIELD_TYPES.map(function (t) {
-      return '<button data-type="' + t[0] + '">+ ' + esc(t[1]) + '</button>'; }).join('') + '</div>';
+    var palette = locked ? '' : '<div class="palette">' + TYPE_GROUPS.map(function (g) {
+      var labelFor = {}; FIELD_TYPES.forEach(function (t) { labelFor[t[0]] = t[1]; });
+      return '<span class="palgroup">' + esc(g[0]) + '</span>' + g[1].map(function (ty) {
+        return '<button data-type="' + ty + '" title="' + esc(TYPE_TIPS[ty] || '') + '">+ ' + esc(labelFor[ty] || ty) + '</button>';
+      }).join('');
+    }).join('') + '</div>';
     var lockBanner = locked ? '<div class="banner">This form’s layout is locked (use as-is). You can change most settings, but its fields, access, and approval routing are locked to the HCS template. An admin can change them.</div>' : '';
 
-    DIRTY = false; clearTimeout(AUTOSAVE_T);
+    DIRTY = false; clearTimeout(AUTOSAVE_T); UNDO_STACK = []; COLLAPSED = {};
+    // long forms open with cards collapsed so the creator can orient first
+    if (fields().length > 12) fields().forEach(function (f) { COLLAPSED[f.id] = true; });
     chrome(
-      '<div style="display:flex;align-items:center;gap:10px;margin:16px 0">' + back +
+      '<div style="display:flex;align-items:center;gap:10px;margin:16px 0;flex-wrap:wrap">' + back +
         '<h1 class="form-title" style="margin:0;font-size:1.2rem">Editing: ' + esc(EDITING.meta.title) + '</h1>' +
-        '<span id="saveState" class="help" style="margin-left:auto;display:inline-flex;align-items:center;gap:5px">' + FormsUI.icon('check', { size: 14 }) + ' Saved</span></div>' +
-      '<div class="editor" id="editorRoot"><div>' + lockBanner +
+        '<span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px">' +
+          (locked ? '' : '<button class="btn ghost sm" id="btnUndo" title="Undo the last add/delete/move (Ctrl+Z)" disabled>Undo</button>') +
+          '<button class="btn ghost sm" id="btnLivePrev" aria-pressed="' + (LIVEPREV ? 'true' : 'false') + '" title="Show a live preview of the form beside the editor">' + FormsUI.icon('eye', { size: 14 }) + ' Preview</button>' +
+          '<span id="saveState" class="help" style="display:inline-flex;align-items:center;gap:5px">' + FormsUI.icon('check', { size: 14 }) + ' Saved</span></span></div>' +
+      '<div class="editor' + (LIVEPREV ? ' withprev' : '') + '" id="editorRoot"><div>' + lockBanner +
         '<div class="field"><label for="fTitle">Form title</label><input class="control" id="fTitle" value="' + esc(EDITING.schema.title || '') + '"' + (locked ? ' readonly' : '') + '></div>' +
         '<div class="field" style="margin-top:10px"><label for="fDesc">Description</label><textarea class="control" id="fDesc"' + (locked ? ' readonly' : '') + '>' + esc(EDITING.schema.description || '') + '</textarea></div>' +
         '<div class="divider"></div>' + palette +
+        '<div id="canvasBar" style="display:none;justify-content:flex-end;margin-bottom:6px"><button class="btn ghost sm" id="btnToggleAll" type="button"></button></div>' +
         '<div id="canvas"></div>' +
-      '</div>' + sidePanel() + '</div>');
+      '</div><div id="livePrevWrap"' + (LIVEPREV ? '' : ' style="display:none"') + '><div class="prevpane"><div class="prevpane-hd">Live preview</div><div id="livePrev"></div></div></div>' + sidePanel() + '</div>');
 
     document.getElementById('back').onclick = function () {
       // save pending edits before leaving so nothing is lost
       var go = function () { DIRTY = false; renderDashboard(); };
       if (DIRTY && !EDITING.structureLocked) doSave(true).then(go); else go();
     };
+    var lp = document.getElementById('btnLivePrev');
+    lp.onclick = function () {
+      LIVEPREV = !LIVEPREV;
+      try { localStorage.setItem('hcsBuilderLivePrev', LIVEPREV ? '1' : '0'); } catch (e) {}
+      lp.setAttribute('aria-pressed', LIVEPREV ? 'true' : 'false');
+      document.getElementById('editorRoot').classList.toggle('withprev', LIVEPREV);
+      document.getElementById('livePrevWrap').style.display = LIVEPREV ? '' : 'none';
+      if (LIVEPREV) renderLivePreview();
+    };
     if (!locked) {
+      var bu = document.getElementById('btnUndo'); if (bu) bu.onclick = doUndo;
+      document.addEventListener('keydown', undoKeyHandler_);
       document.querySelectorAll('.palette button').forEach(function (b) { b.onclick = function () { addField(b.getAttribute('data-type')); }; });
       document.getElementById('fTitle').oninput = function () { EDITING.schema.title = this.value; };
       document.getElementById('fDesc').oninput = function () { EDITING.schema.description = this.value; };
@@ -792,14 +868,74 @@
     }
     wireSide();
     renderCanvas();
+    if (LIVEPREV) renderLivePreview();
+  }
+
+  // ---------- undo (structural ops only: add/delete/duplicate/move/drag/parent-block) ----------
+  function snapshotUndo() {
+    UNDO_STACK.push(JSON.stringify(EDITING.schema));
+    if (UNDO_STACK.length > 20) UNDO_STACK.shift();
+    var bu = document.getElementById('btnUndo'); if (bu) bu.disabled = false;
+  }
+  function doUndo() {
+    if (!UNDO_STACK.length || !EDITING || EDITING.structureLocked) return;
+    if (!document.getElementById('canvas')) return; // not on the editor screen
+    EDITING.schema = normalizeSchema(JSON.parse(UNDO_STACK.pop()));
+    renderCanvas(); markDirty();
+    var bu = document.getElementById('btnUndo'); if (bu) bu.disabled = !UNDO_STACK.length;
+    FormsUI.toast('Undone');
+  }
+  function undoKeyHandler_(e) {
+    if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
+    var t = e.target && e.target.tagName;
+    if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT') return; // native text undo wins
+    if (EDITING) { e.preventDefault(); doUndo(); }
   }
 
   function renderCanvas() {
     var host = document.getElementById('canvas');
     var locked = EDITING.structureLocked;
     var fs = fields();
-    if (!fs.length) { host.innerHTML = '<p class="help">No fields yet. Add one from the palette above' + (EDITING.structureLocked ? '' : '') + '.</p>'; return; }
+    var bar = document.getElementById('canvasBar');
+    if (bar) bar.style.display = (!locked && fs.length > 3) ? 'flex' : 'none';
+    if (!fs.length) {
+      // Empty canvas: offer the common starting points instead of a blank stare.
+      host.innerHTML = locked ? '<p class="help">No fields yet.</p>' :
+        '<div class="startchoices">' +
+          '<button type="button" id="startParent"><strong>👪 Parent form</strong><span>Adds the parent identity block + student picker and sets access to Private (parents verify by email). Most HCS forms start here.</span></button>' +
+          '<button type="button" id="startContact"><strong>✏️ Basic info block</strong><span>Adds First name, Last name, and Email fields — for open/staff forms.</span></button>' +
+          '<button type="button" id="startBlank"><strong>📄 Start blank</strong><span>Add fields one at a time from the palette above.</span></button>' +
+        '</div>';
+      var sp = document.getElementById('startParent'); if (sp) sp.onclick = function () { addParentBlock(true); };
+      var sc = document.getElementById('startContact');
+      if (sc) sc.onclick = function () {
+        snapshotUndo();
+        fields().push(
+          { id: uid(), type: 'text', label: 'First name', required: true },
+          { id: uid(), type: 'text', label: 'Last name', required: true },
+          { id: uid(), type: 'email', label: 'Email', required: true });
+        renderCanvas(); markDirty();
+      };
+      var sb2 = document.getElementById('startBlank'); if (sb2) sb2.onclick = function () { FormsUI.toast('Pick a field type from the palette above'); };
+      refreshLivePreview();
+      return;
+    }
     host.innerHTML = fs.map(function (f, i) { return fieldCard(f, i, locked); }).join('');
+    // restore per-card collapse state
+    fs.forEach(function (f) {
+      if (COLLAPSED[f.id]) { var c = host.querySelector('.fieldcard[data-fid="' + f.id + '"]'); if (c) c.classList.add('collapsed'); }
+    });
+    var tAll = document.getElementById('btnToggleAll');
+    if (tAll) {
+      var allCollapsed = fs.every(function (f) { return COLLAPSED[f.id]; });
+      tAll.textContent = allCollapsed ? 'Expand all' : 'Collapse all';
+      tAll.onclick = function () {
+        var target = !fs.every(function (f) { return COLLAPSED[f.id]; });
+        fs.forEach(function (f) { COLLAPSED[f.id] = target; });
+        renderCanvas();
+      };
+    }
+    refreshLivePreview();
     if (locked) return;
     fs.forEach(function (f, i) {
       bindInput('lbl_' + f.id, function (v) { f.label = v; var lp = document.querySelector('.fieldcard[data-fid="' + f.id + '"] .fclabel'); if (lp) lp.textContent = v; });
@@ -826,15 +962,24 @@
             });
           });
           var capBox = document.getElementById('cap_' + f.id);
-          if (capBox && f.capacity && document.activeElement !== capBox) capBox.value = capToText(f.capacity);
         }
         f.options = newOpts;
+        // keep the per-option capacity inputs in sync with the (renamed/added/removed) options
+        var cb = document.getElementById('capbox_' + f.id); if (cb) cb.innerHTML = capRows(f);
       };
       var pfEl = document.getElementById('pf_' + f.id); if (pfEl) pfEl.onchange = function () { f.prefillFrom = this.value; };
       var multEl = document.getElementById('mult_' + f.id); if (multEl) multEl.onchange = function () { f.multiple = this.checked; };
       var lvlEl = document.getElementById('lvl_' + f.id); if (lvlEl) lvlEl.onchange = function () { f.staffLevel = this.value; };
       var accEl = document.getElementById('acc_' + f.id); if (accEl) accEl.oninput = function () { f.accept = this.value; };
-      var capEl = document.getElementById('cap_' + f.id); if (capEl) capEl.oninput = function () { f.capacity = parseCap(this.value); };
+      var capbox = document.getElementById('capbox_' + f.id);
+      if (capbox) capbox.addEventListener('input', function () {
+        var cap = {};
+        capbox.querySelectorAll('input[data-capopt]').forEach(function (inp) {
+          var val = inp.value.trim();
+          if (val !== '' && isFinite(Number(val)) && Number(val) >= 0) cap[inp.getAttribute('data-capopt')] = Number(val);
+        });
+        f.capacity = Object.keys(cap).length ? cap : undefined;
+      });
       var cif = document.getElementById('cif_' + f.id), cop = document.getElementById('cop_' + f.id), cval = document.getElementById('cval_' + f.id);
       var updCond = function () { if (!cif || !cif.value) { delete f.showIf; } else { f.showIf = { field: cif.value, op: cop.value, value: cval.value }; } };
       if (cif) cif.onchange = updCond; if (cop) cop.onchange = updCond; if (cval) cval.oninput = updCond;
@@ -850,7 +995,12 @@
         if (el.tagName === 'SELECT') el.onchange = h; else el.oninput = h;
       });
       var colEl = document.getElementById('col_' + f.id);
-      if (colEl) colEl.onclick = function () { var c = document.querySelector('.fieldcard[data-fid="' + f.id + '"]'); if (c) c.classList.toggle('collapsed'); };
+      if (colEl) colEl.onclick = function () {
+        var c = document.querySelector('.fieldcard[data-fid="' + f.id + '"]');
+        if (c) { c.classList.toggle('collapsed'); COLLAPSED[f.id] = c.classList.contains('collapsed'); }
+        var tb = document.getElementById('btnToggleAll');
+        if (tb) tb.textContent = fields().every(function (x) { return COLLAPSED[x.id]; }) ? 'Expand all' : 'Collapse all';
+      };
       document.getElementById('up_' + f.id).onclick = function () { move(i, -1); markDirty(); };
       document.getElementById('dn_' + f.id).onclick = function () { move(i, 1); markDirty(); };
       document.getElementById('dup_' + f.id).onclick = function () { duplicateFieldAt(i); };
@@ -869,18 +1019,20 @@
         e.preventDefault(); card.style.borderColor = '';
         var to = Number(card.getAttribute('data-idx'));
         if (DRAG_FROM == null || DRAG_FROM === to) return;
+        snapshotUndo();
         var fs2 = fields(); var moved = fs2.splice(DRAG_FROM, 1)[0]; fs2.splice(to, 0, moved);
         DRAG_FROM = null; renderCanvas(); markDirty();
       });
     });
   }
   function duplicateFieldAt(i) {
+    snapshotUndo();
     var fs = fields(); var c = JSON.parse(JSON.stringify(fs[i])); c.id = uid();
     fs.splice(i + 1, 0, c); renderCanvas(); markDirty();
   }
   function deleteFieldAt(i) {
-    FormsUI.confirm('Delete this field?', 'This removes the field from the form.', 'Delete').then(function (ok) {
-      if (!ok) return; fields().splice(i, 1); renderCanvas(); markDirty();
+    FormsUI.confirm('Delete this field?', 'This removes the field from the form. (Undo is available afterward.)', 'Delete').then(function (ok) {
+      if (!ok) return; snapshotUndo(); fields().splice(i, 1); renderCanvas(); markDirty();
     });
   }
 
@@ -922,9 +1074,8 @@
         body += '<label class="switchrow" style="margin-top:8px"><span>Allow ' + (f.type === 'file' ? 'multiple files' : 'choosing multiple') + '</span><span class="toggle"><input type="checkbox" id="mult_' + f.id + '"' + (f.multiple ? ' checked' : '') + '><span class="sl"></span></span></label>';
       }
       if (OPTION_TYPES[f.type]) {
-        body += '<details class="adv"><summary>Limit sign-ups per option (capacity)</summary>' +
-          '<label class="lbl">One per line: <code>Option = number</code></label>' +
-          '<textarea class="control" id="cap_' + f.id + '" placeholder="Tue 3:00 = 5">' + esc(capToText(f.capacity)) + '</textarea>' +
+        body += '<details class="adv"' + (f.capacity && Object.keys(f.capacity).length ? ' open' : '') + '><summary>Limit sign-ups per option (capacity)</summary>' +
+          '<div id="capbox_' + f.id + '">' + capRows(f) + '</div>' +
           '<p class="help">Blank = unlimited. A full option is hidden from submitters and rejected on submit.</p></details>';
       }
       if (f.type === 'staffPicker') {
@@ -1010,15 +1161,14 @@
     } else { return ''; }
     return '<details class="adv"><summary>Validation</summary>' + inner + '</details>';
   }
-  function capToText(cap) { cap = cap || {}; return Object.keys(cap).map(function (k) { return k + ' = ' + cap[k]; }).join('\n'); }
-  function parseCap(text) {
-    var m = {};
-    String(text).split('\n').forEach(function (line) {
-      var i = line.lastIndexOf('='); if (i < 0) return;
-      var k = line.slice(0, i).trim(); var n = parseInt(line.slice(i + 1).trim(), 10);
-      if (k && isFinite(n) && n >= 0) m[k] = n;
-    });
-    return m;
+  /** Per-option capacity rows (a number input beside each option; blank = unlimited). */
+  function capRows(f) {
+    var opts = f.options || [];
+    if (!opts.length) return '<p class="help">Add options above first.</p>';
+    return opts.map(function (o) {
+      var v = (f.capacity && f.capacity[o] != null) ? f.capacity[o] : '';
+      return '<div class="caprow"><span>' + esc(o) + '</span><input type="number" min="0" class="control" data-capopt="' + esc(o) + '" value="' + esc(v) + '" placeholder="∞" aria-label="Capacity for ' + esc(o) + '"></div>';
+    }).join('');
   }
   function sourceFieldChecks(cur) {
     var sel = (cur.calc && cur.calc.fields) || [];
@@ -1037,9 +1187,10 @@
       .map(function (o) { return '<option value="' + o[0] + '"' + (sel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('');
   }
   function bindInput(id, cb) { var el = document.getElementById(id); if (el) el.oninput = function () { cb(this.value); }; }
-  function move(i, d) { var fs = fields(); var j = i + d; if (j < 0 || j >= fs.length) return; var t = fs[i]; fs[i] = fs[j]; fs[j] = t; renderCanvas(); }
+  function move(i, d) { var fs = fields(); var j = i + d; if (j < 0 || j >= fs.length) return; snapshotUndo(); var t = fs[i]; fs[i] = fs[j]; fs[j] = t; renderCanvas(); }
 
   function addField(type) {
+    snapshotUndo();
     var f = { id: uid(), type: type, label: '', required: false };
     if (OPTION_TYPES[type]) f.options = ['Option 1'];
     if (type === 'sectionHeader') f.label = 'Section title';
@@ -1050,21 +1201,27 @@
     setTimeout(function () { var el = document.getElementById('lbl_' + f.id); if (el) el.focus(); }, 30);
   }
 
-  function addParentBlock() {
-    if (!confirm('Add the parent identity block?\n\nThis inserts First/Last name, a locked verified Email, and a student picker, and sets the form to Private (parents verify by email).')) return;
-    var blk = [
-      { id: uid(), type: 'sectionHeader', label: 'Parent / guardian' },
-      { id: uid(), type: 'text', label: 'First name', required: true, prefillFrom: 'parentFirst' },
-      { id: uid(), type: 'text', label: 'Last name', required: true, prefillFrom: 'parentLast' },
-      { id: uid(), type: 'email', label: 'Your email', required: true, prefillFrom: 'parentEmail', help: 'Verified — the email you sign in with.' },
-      { id: uid(), type: 'sectionHeader', label: 'Student' },
-      { id: uid(), type: 'studentPicker', label: 'Which student?', required: true, help: 'Only your students are listed.' },
-      { id: uid(), type: 'text', label: 'Grade', required: false, prefillFrom: 'studentGrade' }
-    ];
-    EDITING.schema.pages[0].fields = blk.concat(fields());
-    EDITING.schema.settings.access = 'private';
-    renderCanvas(); syncSideAccess();
-    FormsUI.toast('Parent block added · access set to Private');
+  function addParentBlock(skipConfirm) {
+    var go = function () {
+      snapshotUndo();
+      var blk = [
+        { id: uid(), type: 'sectionHeader', label: 'Parent / guardian' },
+        { id: uid(), type: 'text', label: 'First name', required: true, prefillFrom: 'parentFirst' },
+        { id: uid(), type: 'text', label: 'Last name', required: true, prefillFrom: 'parentLast' },
+        { id: uid(), type: 'email', label: 'Your email', required: true, prefillFrom: 'parentEmail', help: 'Verified — the email you sign in with.' },
+        { id: uid(), type: 'sectionHeader', label: 'Student' },
+        { id: uid(), type: 'studentPicker', label: 'Which student?', required: true, help: 'Only your students are listed.' },
+        { id: uid(), type: 'text', label: 'Grade', required: false, prefillFrom: 'studentGrade' }
+      ];
+      EDITING.schema.pages[0].fields = blk.concat(fields());
+      EDITING.schema.settings.access = 'private';
+      renderCanvas(); syncSideAccess(); markDirty();
+      FormsUI.toast('Parent block added · access set to Private');
+    };
+    if (skipConfirm === true) return go();
+    FormsUI.confirm('Add the parent identity block?',
+      'Inserts First/Last name, a locked verified Email, and a student picker, and sets the form to <strong>Private</strong> (parents verify by email).',
+      'Add it').then(function (ok) { if (ok) go(); });
   }
 
   // ---------- side settings panel ----------
@@ -1077,22 +1234,26 @@
       '<label class="lbl">Status</label><select class="control" id="sLife">' +
         opt('draft', 'Draft', s.lifecycle) + opt('published', 'Published', s.lifecycle) + opt('closed', 'Closed', s.lifecycle) + '</select>' +
       '<div class="switchrow"><span>Not accepting responses' + info('Temporarily closes the form to new submissions without unpublishing it — submitters see a friendly “not accepting responses” message.') + '</span><span class="toggle"><input type="checkbox" id="sLock"' + (s.locked ? ' checked' : '') + '><span class="sl"></span></span></div>' +
-      '<div class="switchrow"><span>Review mode — send both emails to the submitter' + info('The email the submitter enters gets BOTH the confirmation (as the requester) and a copy of the owner notification (as the reviewer). Useful when one person builds and submits the form.') + '</span><span class="toggle"><input type="checkbox" id="sReview"' + (s.reviewMode ? ' checked' : '') + '><span class="sl"></span></span></div>' +
-      '<div class="switchrow"><span>Limit to one response per person' + info('Blocks a second submission from the same email address (verified email for parent/staff forms, or the entered email on open forms).') + '</span><span class="toggle"><input type="checkbox" id="sOnce"' + (s.onePerEmail ? ' checked' : '') + '><span class="sl"></span></span></div>' +
-      '<div class="switchrow"><span>Allow "Save &amp; add another child"' + info('After submitting, a parent can keep their entered info and quickly submit again for another of their children (one response per child). Best for per-student forms with a student picker.') + '</span><span class="toggle"><input type="checkbox" id="sMulti"' + (s.multiStudent ? ' checked' : '') + '><span class="sl"></span></span></div>' +
       '<label class="lbl">Notify on submit (emails, comma-sep)</label><input class="control" id="sNotify" value="' + esc((s.notifyEmails || []).join(', ')) + '"><div id="sNotifyWarn" class="help" style="color:var(--hcs-red);display:none">Only @harfordchristian.org addresses are allowed — others are dropped when you save.</div>' +
       '<label class="lbl">Confirmation message</label><textarea class="control" id="sConfirm">' + esc(s.confirmationMessage || '') + '</textarea>' +
-      '<div class="divider"></div><h4>Response record</h4>' +
-      '<div class="switchrow"><span>Attach a PDF copy to the confirmation email' + info('The submitter’s receipt email includes a branded PDF of their answers. Great for signed permission slips, physicals, and KI forms. A copy is also saved in the form’s Uploads folder.') + '</span><span class="toggle"><input type="checkbox" id="sPdf"' + (s.pdfCopy ? ' checked' : '') + '><span class="sl"></span></span></div>' +
-      '<div class="switchrow"><span>Let people edit or withdraw their response' + info('Adds a secure “Edit or withdraw” link to the receipt email. They can change answers or cancel while the response is still Submitted or Pending Approval — no login needed.') + '</span><span class="toggle"><input type="checkbox" id="sEdit"' + (s.allowEdit ? ' checked' : '') + '><span class="sl"></span></span></div>' +
-      '<div class="divider"></div><h4>Scheduling &amp; limits</h4>' +
-      '<label class="lbl">Opens (optional)</label><input class="control" id="sOpen" type="datetime-local" value="' + esc(s.openDate || '') + '">' +
-      '<label class="lbl">Closes (optional)</label><input class="control" id="sClose" type="datetime-local" value="' + esc(s.closeDate || '') + '">' +
-      '<label class="lbl">Max total responses (0 = unlimited)</label><input class="control" id="sMax" type="number" min="0" value="' + esc(s.maxResponses || 0) + '">' +
-      '<div class="divider"></div><h4>Approvals</h4>' +
-      '<div class="switchrow"><span>Require approval before it’s final' + info('Submissions land as “Pending Approval” and route to the approvers below. They approve/reject from the Approvals tab; the submitter is emailed the decision.') + '</span><span class="toggle"><input type="checkbox" id="aEn"' + (ap.enabled ? ' checked' : '') + '><span class="sl"></span></span></div>' +
-      '<label class="lbl">Approvers (emails or group names, comma-sep)</label><input class="control" id="aWho" value="' + esc((ap.approvers || []).join(', ')) + '">' +
-      '<label class="lbl">Require</label><select class="control" id="aMode">' + opt('any', 'Any one approver', ap.mode || 'any') + opt('all', 'All approvers', ap.mode || 'any') + '</select>' +
+      // rarely-touched settings live behind grouped disclosures (open when something inside is set)
+      '<details class="sgroup"' + ((s.reviewMode || s.onePerEmail || s.multiStudent || s.pdfCopy || s.allowEdit) ? ' open' : '') + '><summary>Response options</summary>' +
+        '<div class="switchrow"><span>Review mode' + info('The email the submitter enters gets BOTH the confirmation (as the requester) and a copy of the owner notification (as the reviewer). Useful when one person builds and submits the form.') + '</span><span class="toggle"><input type="checkbox" id="sReview"' + (s.reviewMode ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+        '<div class="switchrow"><span>One response per person' + info('Blocks a second submission from the same email address (verified email for parent/staff forms, or the entered email on open forms).') + '</span><span class="toggle"><input type="checkbox" id="sOnce"' + (s.onePerEmail ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+        '<div class="switchrow"><span>Save &amp; add another child' + info('After submitting, a parent can keep their entered info and quickly submit again for another of their children (one response per child). Best for per-student forms with a student picker.') + '</span><span class="toggle"><input type="checkbox" id="sMulti"' + (s.multiStudent ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+        '<div class="switchrow"><span>PDF copy with receipt' + info('The submitter’s receipt email includes a branded PDF of their answers. Great for signed permission slips, physicals, and KI forms. A copy is also saved in the form’s Uploads folder.') + '</span><span class="toggle"><input type="checkbox" id="sPdf"' + (s.pdfCopy ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+        '<div class="switchrow"><span>Allow edit &amp; withdraw' + info('Adds a secure “Edit or withdraw” link to the receipt email. They can change answers or cancel while the response is still Submitted or Pending Approval — no login needed.') + '</span><span class="toggle"><input type="checkbox" id="sEdit"' + (s.allowEdit ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+      '</details>' +
+      '<details class="sgroup"' + ((s.openDate || s.closeDate || Number(s.maxResponses)) ? ' open' : '') + '><summary>Scheduling &amp; limits</summary>' +
+        '<label class="lbl">Opens (optional)</label><input class="control" id="sOpen" type="datetime-local" value="' + esc(s.openDate || '') + '">' +
+        '<label class="lbl">Closes (optional)</label><input class="control" id="sClose" type="datetime-local" value="' + esc(s.closeDate || '') + '">' +
+        '<label class="lbl">Max total responses (0 = unlimited)</label><input class="control" id="sMax" type="number" min="0" value="' + esc(s.maxResponses || 0) + '">' +
+      '</details>' +
+      '<details class="sgroup"' + (ap.enabled ? ' open' : '') + '><summary>Approvals</summary>' +
+        '<div class="switchrow"><span>Require approval' + info('Submissions land as “Pending Approval” and route to the approvers below. They approve/reject from the Approvals tab; the submitter is emailed the decision.') + '</span><span class="toggle"><input type="checkbox" id="aEn"' + (ap.enabled ? ' checked' : '') + '><span class="sl"></span></span></div>' +
+        '<label class="lbl">Approvers (emails or group names, comma-sep)</label><input class="control" id="aWho" value="' + esc((ap.approvers || []).join(', ')) + '">' +
+        '<label class="lbl">Require</label><select class="control" id="aMode">' + opt('any', 'Any one approver', ap.mode || 'any') + opt('all', 'All approvers', ap.mode || 'any') + '</select>' +
+      '</details>' +
       '<div class="divider"></div>' +
       (EDITING.structureLocked ? '' : '<button class="btn gold block" id="btnParent" style="margin-bottom:8px;display:inline-flex;align-items:center;justify-content:center;gap:6px">' + FormsUI.icon('plus') + ' This form is for Parents</button>') +
       '<button class="btn block" id="btnSave">Save</button>' +
@@ -1159,7 +1320,64 @@
   function stateFromSettings_(s) {
     return { lifecycle: s.lifecycle, access: s.access, locked: s.locked, reviewMode: !!s.reviewMode, onePerEmail: !!s.onePerEmail, multiStudent: !!s.multiStudent, pdfCopy: !!s.pdfCopy, allowEdit: !!s.allowEdit, openDate: s.openDate || '', closeDate: s.closeDate || '', maxResponses: Number(s.maxResponses) || 0, approval: s.approval || { enabled: false, approvers: [], mode: 'any' }, notifyEmails: s.notifyEmails, confirmationMessage: s.confirmationMessage };
   }
-  function markDirty() { DIRTY = true; setDirtyDot(true); scheduleAutosave(); }
+  var PREV_T = null;
+  function markDirty() {
+    DIRTY = true; setDirtyDot(true); scheduleAutosave();
+    if (LIVEPREV) { clearTimeout(PREV_T); PREV_T = setTimeout(renderLivePreview, 250); }
+  }
+  function refreshLivePreview() { if (LIVEPREV) renderLivePreview(); }
+
+  // ---------- live preview (read-only mirror of what a submitter sees, re-rendered as you edit) ----------
+  function renderLivePreview() {
+    var host = document.getElementById('livePrev'); if (!host || !EDITING) return;
+    var s = EDITING.schema;
+    var h = '<div class="pv-title">' + esc(s.title || 'Untitled form') + '</div>' +
+      (s.description ? '<p class="pv-desc">' + esc(s.description) + '</p>' : '');
+    var step = 1;
+    (s.pages[0].fields || []).forEach(function (f) { h += pvField_(f, s, function () { step++; return step; }); });
+    host.innerHTML = h || '<p class="help">Nothing to preview yet.</p>';
+  }
+  function pvField_(f, s, nextStep) {
+    if (f.type === 'pageBreak') return '<div class="pv-break">Step ' + nextStep() + (f.label ? ' — ' + esc(f.label) : '') + '</div>';
+    if (f.type === 'sectionHeader') return '<div class="section-head">' + esc(f.label) + '</div>';
+    if (f.type === 'description') return '<p class="desc-block">' + esc(f.label) + '</p>';
+    if (f.type === 'faq') {
+      return '<div class="faq-block">' + (f.label ? '<div class="section-head">' + esc(f.label) + '</div>' : '') +
+        (f.items || []).map(function (it) { return '<details class="faq-item"><summary>' + esc(it.q || '') + '</summary><div class="faq-a">' + esc(it.a || '') + '</div></details>'; }).join('') + '</div>';
+    }
+    var ctrl = '';
+    switch (f.type) {
+      case 'textarea': ctrl = '<textarea class="control" disabled placeholder="' + esc(f.placeholder || '') + '"></textarea>'; break;
+      case 'dropdown': ctrl = '<select class="control" disabled><option>— Choose —</option></select>'; break;
+      case 'studentPicker': ctrl = f.multiple
+        ? '<div class="choices"><label class="choice"><input type="checkbox" disabled><span>(the parent’s own students)</span></label></div>'
+        : '<select class="control" disabled><option>— Choose student —</option></select>'; break;
+      case 'staffPicker': ctrl = '<select class="control" disabled><option>— Choose ' + (f.staffLevel ? f.staffLevel + ' ' : '') + 'staff —</option></select>'; break;
+      case 'radio': case 'yesno': {
+        var opts = f.type === 'yesno' ? ['Yes', 'No'] : (f.options || []);
+        ctrl = '<div class="choices">' + opts.map(function (o) { return '<label class="choice"><input type="radio" disabled><span>' + esc(o) + (f.capacity && f.capacity[o] != null ? ' <em style="color:#999">(max ' + f.capacity[o] + ')</em>' : '') + '</span></label>'; }).join('') + '</div>'; break;
+      }
+      case 'checkboxes':
+        ctrl = '<div class="choices">' + (f.options || []).map(function (o) { return '<label class="choice"><input type="checkbox" disabled><span>' + esc(o) + (f.capacity && f.capacity[o] != null ? ' <em style="color:#999">(max ' + f.capacity[o] + ')</em>' : '') + '</span></label>'; }).join('') + '</div>'; break;
+      case 'rating': { var n = f.max || 5, st = ''; for (var i = 0; i < n; i++) st += '☆'; ctrl = '<div style="font-size:1.3rem;color:var(--hcs-gold)">' + st + '</div>'; break; }
+      case 'file': ctrl = '<input type="file" class="control" disabled>'; break;
+      case 'signature': ctrl = '<div class="pv-sig">✍ signature box</div>'; break;
+      case 'calculation': ctrl = '<div class="calc-value">0</div>'; break;
+      default: {
+        var t = { email: 'email', phone: 'tel', number: 'number', date: 'date', time: 'time' }[f.type] || 'text';
+        ctrl = '<input class="control" type="' + t + '" disabled placeholder="' + esc(f.placeholder || '') + '">';
+      }
+    }
+    var cond = '';
+    if (f.showIf && f.showIf.field) {
+      var src = (fields().filter(function (g) { return g.id === f.showIf.field; })[0] || {});
+      var opTxt = { equals: 'is', notEquals: 'is not', contains: 'includes', notEmpty: 'is answered', empty: 'is blank' }[f.showIf.op] || f.showIf.op;
+      cond = '<div class="pv-cond">Shown when “' + esc(src.label || f.showIf.field) + '” ' + opTxt + (f.showIf.value ? ' “' + esc(f.showIf.value) + '”' : '') + '</div>';
+    }
+    return '<div class="field">' + cond +
+      '<label class="fieldlabel">' + esc(f.label || '(no label)') + (f.required ? '<span class="req">*</span>' : '') + '</label>' +
+      ctrl + (f.help ? '<div class="help">' + esc(f.help) + '</div>' : '') + '</div>';
+  }
   function setDirtyDot(on) { var d = document.getElementById('saveState'); if (d) d.innerHTML = on ? '● Unsaved…' : FormsUI.icon('check', { size: 14 }) + ' Saved'; }
   function scheduleAutosave() { if (EDITING && EDITING.structureLocked) return; clearTimeout(AUTOSAVE_T); AUTOSAVE_T = setTimeout(function () { doSave(true); }, 1500); }
   /** Save schema + settings. silent=true for autosave (no toast, no button spinner). Returns a promise. */
@@ -1192,6 +1410,17 @@
   function saveAll() { return doSave(false); }
 
   // ---------- responses ----------
+  /** Render a response cell: Drive/file URLs become clickable links, everything else escapes. */
+  function respCellHtml(c) {
+    var s = String(c == null ? '' : c);
+    if (!/https?:\/\//.test(s)) return esc(s);
+    var n = 0;
+    return s.split(/\s*\|\s*|\s+/).filter(Boolean).map(function (tok) {
+      if (/^https?:\/\//.test(tok)) { n++; return '<a href="' + esc(tok) + '" target="_blank" rel="noopener">file ' + n + ' ↗</a>'; }
+      return esc(tok);
+    }).join(' ');
+  }
+
   function openResponses(formId) {
     chrome('<p class="help" style="padding:24px">Loading responses…</p>');
     call('getResponses', [formId, 100]).then(function (r) {
@@ -1200,13 +1429,48 @@
         '<h1 class="form-title" style="margin:0;font-size:1.2rem">Responses (' + r.count + ')</h1>' +
         '<button class="btn ghost sm" id="exportCsv" style="margin-left:auto">Export CSV</button>' +
         (r.sheetUrl ? '<a class="btn ghost sm" style="text-decoration:none" target="_blank" href="' + esc(r.sheetUrl) + '">Open Sheet ↗</a>' : '') + '</div>';
-      var table = !r.rows.length ? '<p class="help">No responses yet.</p>' :
-        '<div style="overflow:auto"><table class="rtable"><thead><tr>' +
-          r.headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-          r.rows.map(function (row) { return '<tr>' + row.map(function (c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>'; }).join('') +
-          '</tbody></table></div>';
-      chrome(head + table);
+      var statusIdx = r.headers.indexOf('Status');
+      var statuses = [];
+      if (statusIdx > -1) r.rows.forEach(function (row) { var v = String(row[statusIdx] || ''); if (v && statuses.indexOf(v) === -1) statuses.push(v); });
+      var toolbar = !r.rows.length ? '' :
+        '<div class="toolbar"><input id="rSearch" type="search" placeholder="Search responses (name, student, email…)" aria-label="Search responses">' +
+        (statuses.length > 1 ? '<select id="rStatus" aria-label="Filter by status"><option value="">All statuses</option>' + statuses.map(function (v) { return '<option>' + esc(v) + '</option>'; }).join('') + '</select>' : '') + '</div>';
+      chrome(head + toolbar + '<div id="rwrap"></div>');
       document.getElementById('back').onclick = renderDashboard;
+
+      var draw = function () {
+        var qEl = document.getElementById('rSearch'), sEl = document.getElementById('rStatus');
+        var q = qEl ? qEl.value.toLowerCase() : '', st = sEl ? sEl.value : '';
+        var list = r.rows.map(function (row, i) { return { row: row, i: i }; }).filter(function (x) {
+          if (st && statusIdx > -1 && String(x.row[statusIdx]) !== st) return false;
+          if (q && !x.row.some(function (c) { return String(c).toLowerCase().indexOf(q) > -1; })) return false;
+          return true;
+        });
+        document.getElementById('rwrap').innerHTML = !r.rows.length ? '<p class="help">No responses yet.</p>' :
+          !list.length ? '<p class="help">No responses match.</p>' :
+          '<p class="help" style="margin:0 0 6px">Click a row to see the full response.</p>' +
+          '<div style="overflow:auto"><table class="rtable"><thead><tr>' +
+            r.headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+            list.map(function (x) { return '<tr data-ri="' + x.i + '" tabindex="0">' + x.row.map(function (c) { return '<td>' + respCellHtml(c) + '</td>'; }).join('') + '</tr>'; }).join('') +
+            '</tbody></table></div>';
+        document.querySelectorAll('.rtable tr[data-ri]').forEach(function (tr) {
+          var open = function (e) {
+            if (e.target && e.target.tagName === 'A') return; // let file links click through
+            var row = r.rows[Number(tr.getAttribute('data-ri'))];
+            var body = '<table style="border-collapse:collapse;font-size:.88rem">' + r.headers.map(function (h, ci) {
+              var v = row[ci];
+              if (v === '' || v == null) return '';
+              return '<tr><td style="padding:5px 12px 5px 0;color:#666;vertical-align:top;white-space:nowrap">' + esc(h) + '</td><td style="padding:5px 0">' + respCellHtml(v) + '</td></tr>';
+            }).join('') + '</table>';
+            modalWith('Response detail', body, null, null);
+          };
+          tr.onclick = open;
+          tr.onkeydown = function (e) { if (e.key === 'Enter') open(e); };
+        });
+      };
+      var qEl2 = document.getElementById('rSearch'); if (qEl2) qEl2.oninput = draw;
+      var sEl2 = document.getElementById('rStatus'); if (sEl2) sEl2.onchange = draw;
+      draw();
       var ex = document.getElementById('exportCsv');
       if (ex) ex.onclick = function () {
         call('exportResponsesCsv', [formId]).then(function (res) {
