@@ -117,6 +117,8 @@
   .calc-value { font-weight:800; color:var(--hcs-red); background:#f7f8fa; }
   .footer { text-align:center; color:var(--muted); font-size:.75rem; padding:22px 0 0; }
   @media (max-width:520px){ .card-pad{ padding:16px; } .page{ padding:14px 10px 48px; } }
+  /* prefilled parent-identity fields hidden behind the "Submitting as…" banner */
+  .identity-collapsed { display:none !important; }
   /* FAQ accordion (faq field type) */
   .faq-block { margin:4px 0 8px; }
   .faq-item { border:1px solid var(--line); border-radius:10px; margin:6px 0; overflow:hidden; background:var(--card); }
@@ -804,7 +806,30 @@
       var faqEl = document.getElementById('faq_' + f.id); if (faqEl) faqEl.oninput = function () { f.items = parseFaq(this.value); };
       bindInput('help_' + f.id, function (v) { f.help = v; });
       var reqEl = document.getElementById('req_' + f.id); if (reqEl) reqEl.onchange = function () { f.required = this.checked; };
-      var optEl = document.getElementById('opt_' + f.id); if (optEl) optEl.oninput = function () { f.options = this.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean); };
+      var optEl = document.getElementById('opt_' + f.id);
+      if (optEl) optEl.oninput = function () {
+        var oldOpts = f.options || [];
+        var newOpts = this.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+        // Rename propagation: capacity limits and conditional rules are keyed by the option's
+        // LABEL, so renaming an option would silently orphan them. When the option count is
+        // unchanged, treat position i as a rename and carry the keys along.
+        if (oldOpts.length === newOpts.length) {
+          oldOpts.forEach(function (o, i) {
+            var n = newOpts[i];
+            if (!o || !n || o === n) return;
+            if (f.capacity && f.capacity[o] != null) { f.capacity[n] = f.capacity[o]; delete f.capacity[o]; }
+            fields().forEach(function (g) {
+              if (g.showIf && g.showIf.field === f.id && g.showIf.value === o) {
+                g.showIf.value = n;
+                var cv = document.getElementById('cval_' + g.id); if (cv) cv.value = n;
+              }
+            });
+          });
+          var capBox = document.getElementById('cap_' + f.id);
+          if (capBox && f.capacity && document.activeElement !== capBox) capBox.value = capToText(f.capacity);
+        }
+        f.options = newOpts;
+      };
       var pfEl = document.getElementById('pf_' + f.id); if (pfEl) pfEl.onchange = function () { f.prefillFrom = this.value; };
       var multEl = document.getElementById('mult_' + f.id); if (multEl) multEl.onchange = function () { f.multiple = this.checked; };
       var lvlEl = document.getElementById('lvl_' + f.id); if (lvlEl) lvlEl.onchange = function () { f.staffLevel = this.value; };
@@ -818,6 +843,7 @@
       if (calcop) calcop.onchange = updCalc; if (calcsrc) calcsrc.addEventListener('change', updCalc);
       var rmaxEl = document.getElementById('rmax_' + f.id); if (rmaxEl) rmaxEl.oninput = function () { f.max = Number(this.value) || 5; };
       var moneyEl = document.getElementById('money_' + f.id); if (moneyEl) moneyEl.onchange = function () { f.money = this.checked; };
+      var priorEl = document.getElementById('prior_' + f.id); if (priorEl) priorEl.onchange = function () { f.priorYear = this.checked; };
       [['vmin_', 'min', 1], ['vmax_', 'max', 1], ['vminl_', 'minLen', 1], ['vmaxl_', 'maxLen', 1], ['vpat_', 'pattern', 0], ['vpmsg_', 'patternMsg', 0], ['vmind_', 'minDate', 0], ['vmaxd_', 'maxDate', 0], ['vnb_', 'notBefore', 0]].forEach(function (spec) {
         var el = document.getElementById(spec[0] + f.id); if (!el) return;
         var h = function () { if (!f.validation) f.validation = {}; f.validation[spec[1]] = spec[2] ? (this.value === '' ? null : Number(this.value)) : this.value; };
@@ -926,6 +952,9 @@
       if (f.type === 'number') {
         body += '<label class="switchrow" style="margin-top:8px"><span>Format as money ($) in the response sheet</span><span class="toggle"><input type="checkbox" id="money_' + f.id + '"' + (f.money ? ' checked' : '') + '><span class="sl"></span></span></label>';
       }
+      if (['file', 'signature', 'calculation', 'studentPicker'].indexOf(f.type) === -1) {
+        body += '<label class="switchrow" style="margin-top:8px"><span>Remember from last time' + info('On parent (Private) forms with a student picker: pre-fills this field from the same student’s most recent prior submission to this form — e.g. last year’s sports. The parent can still change it.') + '</span><span class="toggle"><input type="checkbox" id="prior_' + f.id + '"' + (f.priorYear ? ' checked' : '') + '><span class="sl"></span></span></label>';
+      }
       body += valBlock(f);
       body += '<details class="adv"><summary>Conditional logic</summary>' +
         '<label class="lbl">Show this field only if…</label>' +
@@ -946,11 +975,13 @@
       '<button class="iconbtn" id="del_' + f.id + '" title="Delete field" aria-label="Delete field">' + FormsUI.icon('trash') + '</button></div></div>' +
       '<div class="fcbody">' + body + '</div></div>';
   }
+  // Field types that can never be a condition source (no user-entered value to compare).
+  var NON_CONDITION_TYPES = { sectionHeader: 1, description: 1, faq: 1, pageBreak: 1, calculation: 1, file: 1, signature: 1 };
   function condFieldOpts(cur) {
     var sel = (cur.showIf && cur.showIf.field) || '';
     var opts = '<option value="">— always show —</option>';
     fields().forEach(function (f) {
-      if (f.id === cur.id || f.type === 'sectionHeader' || f.type === 'description') return;
+      if (f.id === cur.id || NON_CONDITION_TYPES[f.type]) return;
       opts += '<option value="' + f.id + '"' + (sel === f.id ? ' selected' : '') + '>' + esc(f.label || f.id) + '</option>';
     });
     return opts;

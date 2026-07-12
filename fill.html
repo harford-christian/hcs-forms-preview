@@ -117,6 +117,8 @@
   .calc-value { font-weight:800; color:var(--hcs-red); background:#f7f8fa; }
   .footer { text-align:center; color:var(--muted); font-size:.75rem; padding:22px 0 0; }
   @media (max-width:520px){ .card-pad{ padding:16px; } .page{ padding:14px 10px 48px; } }
+  /* prefilled parent-identity fields hidden behind the "Submitting as…" banner */
+  .identity-collapsed { display:none !important; }
   /* FAQ accordion (faq field type) */
   .faq-block { margin:4px 0 8px; }
   .faq-item { border:1px solid var(--line); border-radius:10px; margin:6px 0; overflow:hidden; background:var(--card); }
@@ -660,8 +662,11 @@ function nextGrade(g) {
     // honeypot (bots fill it; humans never see it) — server drops any submission with this set
     body += '<input type="text" id="hpField" name="hp_addr" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute!important;left:-9999px;top:auto;width:1px;height:1px;opacity:0">';
     if (VIA === 'otp' && PREFILL && PREFILL.parent) {
-      body += '<div class="notice info" style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
-        '<span>Signed in as <strong>' + FormsUI.esc(PREFILL.parent.email) + '</strong></span>' +
+      var pName = ((PREFILL.parent.first || '') + ' ' + (PREFILL.parent.last || '')).trim();
+      body += '<div class="notice info" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">' +
+        '<span>Submitting as <strong>' + FormsUI.esc(pName || PREFILL.parent.email) + '</strong>' +
+        (pName ? ' <span style="color:#666">(' + FormsUI.esc(PREFILL.parent.email) + ')</span>' : '') +
+        ' <a href="#" id="showIdentity" style="display:none;margin-left:6px">Update my info</a></span>' +
         '<button id="signOut" class="btn ghost sm" type="button">Not you?</button></div>';
     } else if (TOKEN && !IS_EDIT) {
       // A parent session is still stored on this device (e.g. a shared/library computer) even though
@@ -694,6 +699,12 @@ function nextGrade(g) {
       pg.fields.forEach(function (f) { pdiv.appendChild(renderField(f)); });
       host.appendChild(pdiv);
     });
+    if (!LOCKED && !IS_PREVIEW && FIELDS.some(function (f) { return f.required; })) {
+      host.parentNode.insertBefore(
+        FormsUI.el('p', { 'class': 'help', 'style': 'margin:0 0 2px' },
+          '<span class="req" aria-hidden="true">*</span> Required — your progress saves automatically on this device.'),
+        host);
+    }
 
     if (!IS_EDIT) applyPrefill();
     initSignatures();
@@ -737,7 +748,8 @@ function nextGrade(g) {
     if (LOCKED) { nav.innerHTML = ''; document.querySelectorAll('.formpage').forEach(function (p) { p.style.display = ''; }); return; }
     var multi = PAGES.length > 1;
     var prog = multi ? '<div class="progress" role="progressbar" aria-valuemin="1" aria-valuemax="' + PAGES.length + '" aria-valuenow="' + (CUR + 1) + '" aria-label="Step ' + (CUR + 1) + ' of ' + PAGES.length + '"><div class="progress-bar" style="width:' + Math.round((CUR + 1) / PAGES.length * 100) + '%"></div></div>' +
-      '<p class="help center">Step ' + (CUR + 1) + ' of ' + PAGES.length + (PAGES[CUR].title ? ' — ' + FormsUI.esc(PAGES[CUR].title) : '') + '</p>' : '';
+      '<p class="help center">Step ' + (CUR + 1) + ' of ' + PAGES.length + (PAGES[CUR].title ? ' — ' + FormsUI.esc(PAGES[CUR].title) : '') + '</p>'
+      : (FIELDS.length > 8 ? '<p class="help center" id="ansCount" aria-live="polite"></p>' : '');
     var btns = '<div style="display:flex;gap:10px;margin-top:14px">';
     if (multi && CUR > 0) btns += '<button class="btn ghost" id="prevBtn" type="button">← Back</button>';
     var lastPage = CUR >= PAGES.length - 1;
@@ -751,6 +763,19 @@ function nextGrade(g) {
     var nx = document.getElementById('nextBtn'); if (nx) nx.onclick = onNext;
     var sb = document.getElementById('submitBtn'); if (sb) sb.onclick = onSubmit;
     var wb = document.getElementById('withdrawBtn'); if (wb) wb.onclick = onWithdraw;
+    updateAnswerCount();
+  }
+  // "X of N required questions answered" — orientation on long single-page forms.
+  function updateAnswerCount() {
+    var el = document.getElementById('ansCount'); if (!el) return;
+    var ans = currentAnswers();
+    var req = FIELDS.filter(function (f) { return f.required && f.type !== 'calculation' && evalShowIf(f.showIf, ans); });
+    if (!req.length) { el.textContent = ''; return; }
+    var done = req.filter(function (f) {
+      if (f.type === 'file' || f.type === 'signature') return (ATTACH[f.id] && ATTACH[f.id].length) || !fieldEmpty(f, ans[f.id]);
+      return !fieldEmpty(f, ans[f.id]);
+    }).length;
+    el.textContent = done + ' of ' + req.length + ' required questions answered';
   }
   function onNext() {
     if (uploadsPending('nextBtn')) return;
@@ -787,7 +812,7 @@ function nextGrade(g) {
     w.scrollIntoView({ behavior: 'smooth', block: 'center' });
     var c = w.querySelector('input:not([type=hidden]),select,textarea,canvas'); if (c) { try { c.focus({ preventScroll: true }); } catch (e) { try { c.focus(); } catch (x) {} } }
   }
-  function onFieldChange() { applyVisibility(); recomputeCalc(); saveDraft(); }
+  function onFieldChange() { applyVisibility(); recomputeCalc(); saveDraft(); updateAnswerCount(); }
 
   // ---------- calculation fields ----------
   // evalShowIf + computeCalc come from SharedLogic.html (generated from Logic.js) — one source, server-identical.
@@ -1050,6 +1075,7 @@ function nextGrade(g) {
           break;
       }
     });
+    collapseIdentityBlock();
     refreshStudentDerived();
 
     if (picker) {
@@ -1059,6 +1085,42 @@ function nextGrade(g) {
         var pel = document.getElementById('f_' + picker.id);
         if (pel) pel.addEventListener('change', refreshStudentDerived);
       }
+    }
+  }
+
+  // Verified parents shouldn't stare at inputs they never touch: hide successfully-prefilled
+  // parent identity fields (the banner already says who's submitting) and any section header
+  // left with nothing visible under it. "Update my info" reveals them for corrections.
+  function collapseIdentityBlock() {
+    if (VIA !== 'otp') return;
+    var IDENTITY = { parentFirst: 1, parentLast: 1, parentEmail: 1 };
+    var collapsed = 0;
+    FIELDS.forEach(function (f) {
+      if (!IDENTITY[f.prefillFrom]) return;
+      if (!readValue(f)) return; // never hide a still-empty required field
+      var w = document.querySelector('[data-fid="' + f.id + '"]');
+      if (w) { w.classList.add('identity-collapsed'); collapsed++; }
+    });
+    if (!collapsed) return;
+    // hide section headers whose entire section is now collapsed
+    var hdr = null, hasVisible = false;
+    var closeSection = function () {
+      if (hdr && !hasVisible) { var hw = document.querySelector('[data-fid="' + hdr.id + '"]'); if (hw) hw.classList.add('identity-collapsed'); }
+    };
+    VISALL.forEach(function (f) {
+      if (f.type === 'sectionHeader') { closeSection(); hdr = f; hasVisible = false; return; }
+      var w = document.querySelector('[data-fid="' + f.id + '"]');
+      if (w && !w.classList.contains('identity-collapsed')) hasVisible = true;
+    });
+    closeSection();
+    var link = document.getElementById('showIdentity');
+    if (link) {
+      link.style.display = '';
+      link.onclick = function (e) {
+        e.preventDefault();
+        document.querySelectorAll('.identity-collapsed').forEach(function (x) { x.classList.remove('identity-collapsed'); });
+        link.style.display = 'none';
+      };
     }
   }
 
